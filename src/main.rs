@@ -205,46 +205,6 @@ impl Instruction {
     }
 }
 
-fn lda(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
-    Instruction::new(
-        Operation::LDA,
-        Address::new(address),
-        index,
-        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
-    )
-}
-
-fn ldan(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
-    Instruction::new(
-        Operation::LDAN,
-        Address::new(address),
-        index,
-        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
-    )
-}
-
-fn ldx(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
-    Instruction::new(
-        Operation::LDX,
-        Address::new(address),
-        index,
-        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
-    )
-}
-
-fn ldxn(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
-    Instruction::new(
-        Operation::LDXN,
-        Address::new(address),
-        index,
-        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
-    )
-}
-
-fn fields(l: u8, r: u8) -> FieldSpecification {
-    FieldSpecification::new(l, r)
-}
-
 impl Mix {
     fn contents(&self, address: Address) -> Word {
         let i = address.bytes[0].0 as usize * BYTE_SIZE as usize + address.bytes[1].0 as usize;
@@ -293,7 +253,7 @@ mod spec {
     fn field_byte_conversions() {
         for l in 0..WORD_BYTES + 1 {
             for r in l..WORD_BYTES + 1 {
-                let field = fields(l, r);
+                let field = FieldSpecification::new(l, r);
                 let byte: Byte = field.clone().into();
                 assert_eq!(
                     field,
@@ -309,243 +269,214 @@ mod spec {
         }
     }
 
-    #[test]
-    fn lda_full() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+    fn loading(
+        operation: Operation,
+        address: i16,
+        index: Option<IndexNumber>,
+        f: Option<FieldSpecification>,
+    ) -> Instruction {
+        Instruction::new(
+            operation,
+            Address::new(address),
+            index,
+            f.unwrap_or_else(|| FieldSpecification::new(0, WORD_BYTES))
+                .into(),
+        )
+    }
 
-        let mix = mix.exec(lda(2000, None, None));
-
-        assert_eq!(mix.a, Word::new(Minus, 1, 16, 3, 5, 4));
+    fn fields(l: u8, r: u8) -> Option<FieldSpecification> {
+        Some(FieldSpecification::new(l, r))
     }
 
     #[test]
-    fn lda_just_bytes() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+    fn lda_all() {
+        test_lda(
+            "should load full word",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            None,
+            Word::new(Minus, 1, 16, 3, 5, 4),
+        );
+        test_lda(
+            "should load just bytes",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(1, 5),
+            Word::new(Plus, 1, 16, 3, 5, 4),
+        );
+        test_lda(
+            "should load only second half",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(3, 5),
+            Word::new(Plus, 0, 0, 3, 5, 4),
+        );
+        test_lda(
+            "should load only first half",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(0, 3),
+            Word::new(Minus, 0, 0, 1, 16, 3),
+        );
+        test_lda(
+            "should load single byte",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(4, 4),
+            Word::new(Plus, 0, 0, 0, 0, 5),
+        );
+        test_lda(
+            "should load just sign",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(0, 0),
+            Word::new(Minus, 0, 0, 0, 0, 0),
+        );
+        fn test_lda(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+            let mut mix = Mix::default();
+            mix.memory[2000] = before;
 
-        let mix = mix.exec(lda(2000, None, Some(fields(1, 5))));
+            let mix = mix.exec(loading(Operation::LDA, 2000, None, f));
 
-        assert_eq!(mix.a, Word::new(Plus, 1, 16, 3, 5, 4));
+            assert_eq!(mix.a, expected, "{}", message);
+        }
     }
 
     #[test]
-    fn lda_second_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+    fn ldan_all() {
+        test_ldan(
+            "should load negative word",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            None,
+            Word::new(Minus, 1, 16, 3, 5, 4),
+        );
+        test_ldan(
+            "should load just bytes",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(1, 5),
+            Word::new(Minus, 1, 16, 3, 5, 4),
+        );
+        test_ldan(
+            "should load only second half",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(3, 5),
+            Word::new(Minus, 0, 0, 3, 5, 4),
+        );
+        test_ldan(
+            "should load only first half",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(0, 3),
+            Word::new(Minus, 0, 0, 1, 16, 3),
+        );
+        test_ldan(
+            "should load single byte",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(4, 4),
+            Word::new(Minus, 0, 0, 0, 0, 5),
+        );
+        test_ldan(
+            "should not load just sign",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(0, 0),
+            Word::new(Minus, 0, 0, 0, 0, 0),
+        );
+        fn test_ldan(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+            let mut mix = Mix::default();
+            mix.memory[2000] = before;
 
-        let mix = mix.exec(lda(2000, None, Some(fields(3, 5))));
+            let mix = mix.exec(loading(Operation::LDAN, 2000, None, f));
 
-        assert_eq!(mix.a, Word::new(Plus, 0, 0, 3, 5, 4));
+            assert_eq!(mix.a, expected, "{}", message);
+        }
     }
 
     #[test]
-    fn lda_first_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+    fn ldx_all() {
+        test_ldx(
+            "should load full word",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            None,
+            Word::new(Minus, 1, 16, 3, 5, 4),
+        );
+        test_ldx(
+            "should load just bytes",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(1, 5),
+            Word::new(Plus, 1, 16, 3, 5, 4),
+        );
+        test_ldx(
+            "should load only second half",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(3, 5),
+            Word::new(Plus, 0, 0, 3, 5, 4),
+        );
+        test_ldx(
+            "should load only first half",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(0, 3),
+            Word::new(Minus, 0, 0, 1, 16, 3),
+        );
+        test_ldx(
+            "should load single byte",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(4, 4),
+            Word::new(Plus, 0, 0, 0, 0, 5),
+        );
+        test_ldx(
+            "should load just sign",
+            Word::new(Minus, 1, 16, 3, 5, 4),
+            fields(0, 0),
+            Word::new(Minus, 0, 0, 0, 0, 0),
+        );
+        fn test_ldx(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+            let mut mix = Mix::default();
+            mix.memory[2000] = before;
 
-        let mix = mix.exec(lda(2000, None, Some(fields(0, 3))));
+            let mix = mix.exec(loading(Operation::LDX, 2000, None, f));
 
-        assert_eq!(mix.a, Word::new(Minus, 0, 0, 1, 16, 3));
+            assert_eq!(mix.x, expected, "{}", message);
+        }
     }
 
     #[test]
-    fn lda_single_byte() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+    fn ldxn_all() {
+        test_ldxn(
+            "should load negative word",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            None,
+            Word::new(Minus, 1, 16, 3, 5, 4),
+        );
+        test_ldxn(
+            "should load just bytes",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(1, 5),
+            Word::new(Minus, 1, 16, 3, 5, 4),
+        );
+        test_ldxn(
+            "should load only second half",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(3, 5),
+            Word::new(Minus, 0, 0, 3, 5, 4),
+        );
+        test_ldxn(
+            "should load only first half",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(0, 3),
+            Word::new(Minus, 0, 0, 1, 16, 3),
+        );
+        test_ldxn(
+            "should load single byte",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(4, 4),
+            Word::new(Minus, 0, 0, 0, 0, 5),
+        );
+        test_ldxn(
+            "should not load just sign",
+            Word::new(Plus, 1, 16, 3, 5, 4),
+            fields(0, 0),
+            Word::new(Minus, 0, 0, 0, 0, 0),
+        );
+        fn test_ldxn(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+            let mut mix = Mix::default();
+            mix.memory[2000] = before;
 
-        let mix = mix.exec(lda(2000, None, Some(fields(4, 4))));
+            let mix = mix.exec(loading(Operation::LDXN, 2000, None, f));
 
-        assert_eq!(mix.a, Word::new(Plus, 0, 0, 0, 0, 5));
-    }
-
-    #[test]
-    fn lda_just_sign() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(lda(2000, None, Some(fields(0, 0))));
-
-        assert_eq!(mix.a, Word::new(Minus, 0, 0, 0, 0, 0));
-    }
-
-    #[test]
-    fn ldan_full() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldan(2000, None, None));
-
-        assert_eq!(mix.a, Word::new(Minus, 1, 16, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldan_just_bytes() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldan(2000, None, Some(fields(1, 5))));
-
-        assert_eq!(mix.a, Word::new(Minus, 1, 16, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldan_second_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldan(2000, None, Some(fields(3, 5))));
-
-        assert_eq!(mix.a, Word::new(Minus, 0, 0, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldan_first_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldan(2000, None, Some(fields(0, 3))));
-
-        assert_eq!(mix.a, Word::new(Minus, 0, 0, 1, 16, 3));
-    }
-
-    #[test]
-    fn ldan_single_byte() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldan(2000, None, Some(fields(4, 4))));
-
-        assert_eq!(mix.a, Word::new(Minus, 0, 0, 0, 0, 5));
-    }
-
-    #[test]
-    fn ldan_just_sign() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldan(2000, None, Some(fields(0, 0))));
-
-        assert_eq!(mix.a, Word::new(Minus, 0, 0, 0, 0, 0));
-    }
-
-    #[test]
-    fn ldx_full() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldx(2000, None, None));
-
-        assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldx_just_bytes() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldx(2000, None, Some(fields(1, 5))));
-
-        assert_eq!(mix.x, Word::new(Plus, 1, 16, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldx_second_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldx(2000, None, Some(fields(3, 5))));
-
-        assert_eq!(mix.x, Word::new(Plus, 0, 0, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldx_first_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldx(2000, None, Some(fields(0, 3))));
-
-        assert_eq!(mix.x, Word::new(Minus, 0, 0, 1, 16, 3));
-    }
-
-    #[test]
-    fn ldx_single_byte() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldx(2000, None, Some(fields(4, 4))));
-
-        assert_eq!(mix.x, Word::new(Plus, 0, 0, 0, 0, 5));
-    }
-
-    #[test]
-    fn ldx_just_sign() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldx(2000, None, Some(fields(0, 0))));
-
-        assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 0));
-    }
-
-    #[test]
-    fn ldxn_full() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldxn(2000, None, None));
-
-        assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldxn_just_bytes() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldxn(2000, None, Some(fields(1, 5))));
-
-        assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldxn_second_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldxn(2000, None, Some(fields(3, 5))));
-
-        assert_eq!(mix.x, Word::new(Minus, 0, 0, 3, 5, 4));
-    }
-
-    #[test]
-    fn ldxn_first_half() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldxn(2000, None, Some(fields(0, 3))));
-
-        assert_eq!(mix.x, Word::new(Minus, 0, 0, 1, 16, 3));
-    }
-
-    #[test]
-    fn ldxn_single_byte() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldxn(2000, None, Some(fields(4, 4))));
-
-        assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 5));
-    }
-
-    #[test]
-    fn ldxn_just_sign() {
-        let mut mix = Mix::default();
-        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
-
-        let mix = mix.exec(ldxn(2000, None, Some(fields(0, 0))));
-
-        assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 0));
+            assert_eq!(mix.x, expected, "{}", message);
+        }
     }
 }
