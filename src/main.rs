@@ -68,6 +68,24 @@ impl Word {
         Self { sign, bytes }
     }
 
+    fn merge(self, word: Word, field_spec: FieldSpecification) -> Self {
+        let mut result = self;
+        if field_spec.l == 0 {
+            result.sign = word.sign;
+        };
+
+        let len = (field_spec.r - field_spec.l) + 1;
+        for i in 0..len {
+            if field_spec.l + i == 0 {
+                continue;
+            };
+            let index_from = (WORD_BYTES + i - len) as usize;
+            let index_to = (field_spec.l + i - 1) as usize;
+            result.bytes[index_to] = word.bytes[index_from];
+        }
+        result
+    }
+
     fn negate(self) -> Self {
         let mut word = self;
         word.sign = self.sign.opposite();
@@ -224,6 +242,7 @@ enum Operation {
     LD4N,
     LD5N,
     LD6N,
+    STA,
 }
 struct Instruction {
     operation: Operation,
@@ -248,83 +267,84 @@ impl Instruction {
 }
 
 impl Mix {
-    fn contents(&self, address: Address) -> Word {
+    fn contents(&self, address: &Address) -> Word {
         let i = address.bytes[0].0 as usize * BYTE_SIZE as usize + address.bytes[1].0 as usize;
         self.memory[i]
     }
 
+    fn save_contents(&mut self, address: &Address, word: Word) {
+        let i = address.bytes[0].0 as usize * BYTE_SIZE as usize + address.bytes[1].0 as usize;
+        self.memory[i] = word;
+    }
+
     fn load(&self, instruction: Instruction) -> Word {
-        self.contents(instruction.address)
+        self.contents(&instruction.address)
             .slice(FieldSpecification::from(instruction.modification))
+    }
+
+    fn store(&mut self, word: Word, instruction: Instruction) {
+        let cell = self.contents(&instruction.address);
+        self.save_contents(
+            &instruction.address,
+            cell.merge(word, FieldSpecification::from(instruction.modification)),
+        );
     }
 
     fn exec(mut self, instruction: Instruction) -> Self {
         match instruction.operation {
             Operation::LDA => {
                 self.a = self.load(instruction);
-                self
             }
             Operation::LDX => {
                 self.x = self.load(instruction);
-                self
             }
             Operation::LD1 => {
                 self.i1 = Index::from(self.load(instruction));
-                self
             }
             Operation::LD2 => {
                 self.i2 = Index::from(self.load(instruction));
-                self
             }
             Operation::LD3 => {
                 self.i3 = Index::from(self.load(instruction));
-                self
             }
             Operation::LD4 => {
                 self.i4 = Index::from(self.load(instruction));
-                self
             }
             Operation::LD5 => {
                 self.i5 = Index::from(self.load(instruction));
-                self
             }
             Operation::LD6 => {
                 self.i6 = Index::from(self.load(instruction));
-                self
             }
             Operation::LDAN => {
                 self.a = self.load(instruction).negate();
-                self
             }
             Operation::LDXN => {
                 self.x = self.load(instruction).negate();
-                self
             }
             Operation::LD1N => {
                 self.i1 = Index::from(self.load(instruction).negate());
-                self
             }
             Operation::LD2N => {
                 self.i2 = Index::from(self.load(instruction).negate());
-                self
             }
             Operation::LD3N => {
                 self.i3 = Index::from(self.load(instruction).negate());
-                self
             }
             Operation::LD4N => {
                 self.i4 = Index::from(self.load(instruction).negate());
-                self
             }
             Operation::LD5N => {
                 self.i5 = Index::from(self.load(instruction).negate());
-                self
             }
             Operation::LD6N => {
                 self.i6 = Index::from(self.load(instruction).negate());
-                self
             }
-        }
+            Operation::STA => {
+                self.store(self.a, instruction);
+            }
+        };
+        self
     }
 }
 
@@ -997,6 +1017,67 @@ mod spec {
             let mix = mix.exec(loading(Operation::LD6N, 2000, None, f));
 
             assert_eq!(mix.i6, expected, "{}", message);
+        }
+    }
+
+    #[test]
+    fn sta() {
+        assert(
+            "should store full word",
+            Word::new(Minus, 1, 2, 3, 4, 5),
+            Word::new(Plus, 6, 7, 8, 9, 0),
+            None,
+            Word::new(Plus, 6, 7, 8, 9, 0),
+        );
+        assert(
+            "should store just bytes",
+            Word::new(Minus, 1, 2, 3, 4, 5),
+            Word::new(Plus, 6, 7, 8, 9, 0),
+            fields(1, 5),
+            Word::new(Minus, 6, 7, 8, 9, 0),
+        );
+        assert(
+            "should store only last byte",
+            Word::new(Minus, 1, 2, 3, 4, 5),
+            Word::new(Plus, 6, 7, 8, 9, 0),
+            fields(5, 5),
+            Word::new(Minus, 1, 2, 3, 4, 0),
+        );
+        assert(
+            "should store single byte",
+            Word::new(Minus, 1, 2, 3, 4, 5),
+            Word::new(Plus, 6, 7, 8, 9, 0),
+            fields(2, 2),
+            Word::new(Minus, 1, 0, 3, 4, 5),
+        );
+        assert(
+            "should store couple byte",
+            Word::new(Minus, 1, 2, 3, 4, 5),
+            Word::new(Plus, 6, 7, 8, 9, 0),
+            fields(2, 3),
+            Word::new(Minus, 1, 9, 0, 4, 5),
+        );
+        assert(
+            "should store also sign",
+            Word::new(Minus, 1, 2, 3, 4, 5),
+            Word::new(Plus, 6, 7, 8, 9, 0),
+            fields(0, 1),
+            Word::new(Plus, 0, 2, 3, 4, 5),
+        );
+        fn assert(
+            message: &str,
+            cell: Word,
+            register: Word,
+            f: Option<FieldSpecification>,
+            expected: Word,
+        ) {
+            let mut mix = Mix::default();
+            mix.memory[2000] = cell;
+            mix.a = register;
+
+            let mix = mix.exec(loading(Operation::STA, 2000, None, f));
+
+            assert_eq!(mix.memory[2000], expected, "{}", message);
         }
     }
 }
