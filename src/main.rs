@@ -114,6 +114,20 @@ impl From<Word> for Index {
         }
     }
 }
+impl Into<Word> for Index {
+    fn into(self) -> Word {
+        Word {
+            sign: self.sign,
+            bytes: [
+                Byte::default(),
+                Byte::default(),
+                Byte::default(),
+                self.bytes[0],
+                self.bytes[1],
+            ],
+        }
+    }
+}
 
 #[derive(Default)]
 struct Jump {
@@ -244,6 +258,12 @@ enum Operation {
     LD6N,
     STA,
     STX,
+    ST1,
+    ST2,
+    ST3,
+    ST4,
+    ST5,
+    ST6,
 }
 struct Instruction {
     operation: Operation,
@@ -346,6 +366,24 @@ impl Mix {
             }
             Operation::STX => {
                 self.store(self.x, instruction);
+            }
+            Operation::ST1 => {
+                self.store(self.i1.into(), instruction);
+            }
+            Operation::ST2 => {
+                self.store(self.i2.into(), instruction);
+            }
+            Operation::ST3 => {
+                self.store(self.i3.into(), instruction);
+            }
+            Operation::ST4 => {
+                self.store(self.i4.into(), instruction);
+            }
+            Operation::ST5 => {
+                self.store(self.i5.into(), instruction);
+            }
+            Operation::ST6 => {
+                self.store(self.i6.into(), instruction);
             }
         };
         self
@@ -735,6 +773,132 @@ mod spec {
             let mix = mix.exec(instruction(STX, 2000, None, f.clone()));
 
             assert_eq!(mix.x, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn st1() {
+        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
+        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Index::new(Plus, 6, 7);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.i1 = before;
+
+            let mix = mix.exec(instruction(ST1, 2000, None, f.clone()));
+
+            assert_eq!(mix.i1, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn st2() {
+        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
+        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Index::new(Plus, 6, 7);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.i2 = before;
+
+            let mix = mix.exec(instruction(ST2, 2000, None, f.clone()));
+
+            assert_eq!(mix.i2, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn st3() {
+        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
+        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Index::new(Plus, 6, 7);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.i3 = before;
+
+            let mix = mix.exec(instruction(ST3, 2000, None, f.clone()));
+
+            assert_eq!(mix.i3, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn st4() {
+        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
+        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Index::new(Plus, 6, 7);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.i4 = before;
+
+            let mix = mix.exec(instruction(ST4, 2000, None, f.clone()));
+
+            assert_eq!(mix.i4, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn st5() {
+        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
+        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Index::new(Plus, 6, 7);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.i5 = before;
+
+            let mix = mix.exec(instruction(ST5, 2000, None, f.clone()));
+
+            assert_eq!(mix.i5, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn st6() {
+        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
+        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Index::new(Plus, 6, 7);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.i6 = before;
+
+            let mix = mix.exec(instruction(ST6, 2000, None, f.clone()));
+
+            assert_eq!(mix.i6, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
         }
     }
