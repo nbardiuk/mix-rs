@@ -1,9 +1,11 @@
 #[derive(Debug, PartialEq, Clone, Copy, Default)]
 struct Byte(pub u8);
 
+const BYTE_SIZE: u8 = 64;
+
 impl Byte {
     fn new(b: u8) -> Byte {
-        assert!(b < 64, "Byte value should be smaller than 64");
+        assert!(b < BYTE_SIZE, "Byte value should be smaller than 64");
         Byte(b)
     }
 }
@@ -37,6 +39,7 @@ impl Word {
             ],
         }
     }
+
     fn slice(self, field_spec: FieldSpecification) -> Self {
         let sign = if field_spec.l > 0 {
             Sign::default()
@@ -57,7 +60,6 @@ impl Word {
     }
 }
 
-// Registers
 #[derive(Default)]
 struct Index {
     sign: Sign,
@@ -103,6 +105,7 @@ struct Mix {
     comparison_indicator: Comparison,
     memory: [Word; 4000],
 }
+
 impl Default for Mix {
     fn default() -> Self {
         Mix {
@@ -164,8 +167,8 @@ impl Address {
         } else {
             Sign::Minus
         };
-        let b0 = Byte::new((address.abs() / 64) as u8);
-        let b1 = Byte::new((address.abs() % 64) as u8);
+        let b0 = Byte::new((address.abs() / BYTE_SIZE as i16) as u8);
+        let b1 = Byte::new((address.abs() % BYTE_SIZE as i16) as u8);
         Self {
             sign,
             bytes: [b0, b1],
@@ -222,7 +225,7 @@ fn fields(l: u8, r: u8) -> FieldSpecification {
 
 impl Mix {
     fn contents(&self, address: Address) -> Word {
-        let i = address.bytes[0].0 as usize * 64 + address.bytes[1].0 as usize;
+        let i = address.bytes[0].0 as usize * BYTE_SIZE as usize + address.bytes[1].0 as usize;
         self.memory[i]
     }
 
