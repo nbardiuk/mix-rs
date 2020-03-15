@@ -181,6 +181,7 @@ enum Operation {
     LDA,
     LDAN,
     LDX,
+    LDXN,
 }
 struct Instruction {
     operation: Operation,
@@ -231,6 +232,15 @@ fn ldx(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) 
     )
 }
 
+fn ldxn(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
+    Instruction::new(
+        Operation::LDXN,
+        Address::new(address),
+        index,
+        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
+    )
+}
+
 fn fields(l: u8, r: u8) -> FieldSpecification {
     FieldSpecification::new(l, r)
 }
@@ -259,6 +269,11 @@ impl Mix {
             }
             Operation::LDX => {
                 self.x = self.load(instruction);
+                self
+            }
+            Operation::LDXN => {
+                self.x = self.load(instruction);
+                self.x.sign = Sign::Minus;
                 self
             }
         }
@@ -470,6 +485,66 @@ mod spec {
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
         let mix = mix.exec(ldx(2000, None, Some(fields(0, 0))));
+
+        assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 0));
+    }
+
+    #[test]
+    fn ldxn_full() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldxn(2000, None, None));
+
+        assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
+    }
+
+    #[test]
+    fn ldxn_just_bytes() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldxn(2000, None, Some(fields(1, 5))));
+
+        assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
+    }
+
+    #[test]
+    fn ldxn_second_half() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldxn(2000, None, Some(fields(3, 5))));
+
+        assert_eq!(mix.x, Word::new(Minus, 0, 0, 3, 5, 4));
+    }
+
+    #[test]
+    fn ldxn_first_half() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldxn(2000, None, Some(fields(0, 3))));
+
+        assert_eq!(mix.x, Word::new(Minus, 0, 0, 1, 16, 3));
+    }
+
+    #[test]
+    fn ldxn_single_byte() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldxn(2000, None, Some(fields(4, 4))));
+
+        assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 5));
+    }
+
+    #[test]
+    fn ldxn_just_sign() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldxn(2000, None, Some(fields(0, 0))));
 
         assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 0));
     }
