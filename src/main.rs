@@ -243,6 +243,7 @@ enum Operation {
     LD5N,
     LD6N,
     STA,
+    STX,
 }
 struct Instruction {
     operation: Operation,
@@ -342,6 +343,9 @@ impl Mix {
             }
             Operation::STA => {
                 self.store(self.a, instruction);
+            }
+            Operation::STX => {
+                self.store(self.x, instruction);
             }
         };
         self
@@ -710,6 +714,27 @@ mod spec {
             let mix = mix.exec(instruction(STA, 2000, None, f.clone()));
 
             assert_eq!(mix.a, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn stx() {
+        assert(None, Word::new(Plus, 6, 7, 8, 9, 0));
+        assert(fields(1, 5), Word::new(Minus, 6, 7, 8, 9, 0));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 0));
+        assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 9, 0, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Word::new(Plus, 6, 7, 8, 9, 0);
+            let mut mix = Mix::default();
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.x = before;
+
+            let mix = mix.exec(instruction(STX, 2000, None, f.clone()));
+
+            assert_eq!(mix.x, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
         }
     }
