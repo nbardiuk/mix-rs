@@ -2,6 +2,7 @@
 struct Byte(pub u8);
 
 const BYTE_SIZE: u8 = 64;
+const WORD_BYTES: u8 = 5;
 
 impl Byte {
     fn new(b: u8) -> Byte {
@@ -24,8 +25,9 @@ impl Default for Sign {
 #[derive(Debug, PartialEq, Default, Copy, Clone)]
 struct Word {
     sign: Sign,
-    bytes: [Byte; 5],
+    bytes: [Byte; WORD_BYTES as usize],
 }
+
 impl Word {
     fn new(sign: Sign, b0: u8, b1: u8, b2: u8, b3: u8, b4: u8) -> Self {
         Word {
@@ -46,14 +48,14 @@ impl Word {
         } else {
             self.sign
         };
-        let mut bytes = [Byte::default(); 5];
+        let mut bytes = [Byte::default(); WORD_BYTES as usize];
         let len = (field_spec.r - field_spec.l) + 1;
         for i in 0..len {
             if field_spec.l + i == 0 {
                 continue;
             };
             let index_from = (field_spec.l + i - 1) as usize;
-            let index_to = (5 + i - len) as usize;
+            let index_to = (WORD_BYTES + i - len) as usize;
             bytes[index_to] = self.bytes[index_from];
         }
         Self { sign, bytes }
@@ -206,7 +208,7 @@ fn lda(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecificatio
         Operation::LDA,
         address,
         index,
-        f.unwrap_or_else(|| fields(0, 5)).into(),
+        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
     )
 }
 
@@ -215,7 +217,7 @@ fn ldx(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecificatio
         Operation::LDX,
         address,
         index,
-        f.unwrap_or_else(|| fields(0, 5)).into(),
+        f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
     )
 }
 
@@ -259,8 +261,8 @@ mod spec {
 
     #[test]
     fn field_byte_conversions() {
-        for l in 0..5 {
-            for r in l..6 {
+        for l in 0..WORD_BYTES + 1 {
+            for r in l..WORD_BYTES + 1 {
                 let field = fields(l, r);
                 let byte: Byte = field.clone().into();
                 assert_eq!(
