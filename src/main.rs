@@ -203,19 +203,19 @@ impl Instruction {
     }
 }
 
-fn lda(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
+fn lda(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
     Instruction::new(
         Operation::LDA,
-        address,
+        Address::new(address),
         index,
         f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
     )
 }
 
-fn ldx(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
+fn ldx(address: i16, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
     Instruction::new(
         Operation::LDX,
-        address,
+        Address::new(address),
         index,
         f.unwrap_or_else(|| fields(0, WORD_BYTES)).into(),
     )
@@ -284,7 +284,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(lda(Address::new(2000), None, None));
+        let mix = mix.exec(lda(2000, None, None));
 
         assert_eq!(mix.a, Word::new(Minus, 1, 16, 3, 5, 4));
     }
@@ -294,7 +294,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(1, 5))));
+        let mix = mix.exec(lda(2000, None, Some(fields(1, 5))));
 
         assert_eq!(mix.a, Word::new(Plus, 1, 16, 3, 5, 4));
     }
@@ -304,7 +304,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(3, 5))));
+        let mix = mix.exec(lda(2000, None, Some(fields(3, 5))));
 
         assert_eq!(mix.a, Word::new(Plus, 0, 0, 3, 5, 4));
     }
@@ -314,7 +314,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(0, 3))));
+        let mix = mix.exec(lda(2000, None, Some(fields(0, 3))));
 
         assert_eq!(mix.a, Word::new(Minus, 0, 0, 1, 16, 3));
     }
@@ -324,7 +324,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(4, 4))));
+        let mix = mix.exec(lda(2000, None, Some(fields(4, 4))));
 
         assert_eq!(mix.a, Word::new(Plus, 0, 0, 0, 0, 5));
     }
@@ -334,7 +334,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(0, 0))));
+        let mix = mix.exec(lda(2000, None, Some(fields(0, 0))));
 
         assert_eq!(mix.a, Word::new(Minus, 0, 0, 0, 0, 0));
     }
@@ -344,7 +344,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(ldx(Address::new(2000), None, None));
+        let mix = mix.exec(ldx(2000, None, None));
 
         assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
     }
@@ -354,7 +354,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(1, 5))));
+        let mix = mix.exec(ldx(2000, None, Some(fields(1, 5))));
 
         assert_eq!(mix.x, Word::new(Plus, 1, 16, 3, 5, 4));
     }
@@ -364,7 +364,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(3, 5))));
+        let mix = mix.exec(ldx(2000, None, Some(fields(3, 5))));
 
         assert_eq!(mix.x, Word::new(Plus, 0, 0, 3, 5, 4));
     }
@@ -374,7 +374,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(0, 3))));
+        let mix = mix.exec(ldx(2000, None, Some(fields(0, 3))));
 
         assert_eq!(mix.x, Word::new(Minus, 0, 0, 1, 16, 3));
     }
@@ -384,7 +384,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(4, 4))));
+        let mix = mix.exec(ldx(2000, None, Some(fields(4, 4))));
 
         assert_eq!(mix.x, Word::new(Plus, 0, 0, 0, 0, 5));
     }
@@ -394,7 +394,7 @@ mod spec {
         let mut mix = Mix::default();
         mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
 
-        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(0, 0))));
+        let mix = mix.exec(ldx(2000, None, Some(fields(0, 0))));
 
         assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 0));
     }
