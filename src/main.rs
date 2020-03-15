@@ -25,6 +25,18 @@ struct Word {
     bytes: [Byte; 5],
 }
 impl Word {
+    fn new(sign: Sign, b0: u8, b1: u8, b2: u8, b3: u8, b4: u8) -> Self {
+        Word {
+            sign,
+            bytes: [
+                Byte::new(b0),
+                Byte::new(b1),
+                Byte::new(b2),
+                Byte::new(b3),
+                Byte::new(b4),
+            ],
+        }
+    }
     fn slice(self, field_spec: FieldSpecification) -> Self {
         let sign = if field_spec.l > 0 {
             Sign::default()
@@ -193,10 +205,14 @@ impl Instruction {
             modification,
         }
     }
+}
 
-    fn lda(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Self {
-        Self::new(Operation::LDA, address, index, f.unwrap_or_default().into())
-    }
+fn lda(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
+    Instruction::new(Operation::LDA, address, index, f.unwrap_or_default().into())
+}
+
+fn fields(l: u8, r: u8) -> FieldSpecification {
+    FieldSpecification::new(l, r)
 }
 
 impl Mix {
@@ -223,12 +239,13 @@ fn main() {
 #[cfg(test)]
 mod spec {
     use super::*;
+    use Sign::*;
 
     #[test]
     fn field_byte_conversions() {
         for l in 0..5 {
             for r in l..6 {
-                let field = FieldSpecification { l, r };
+                let field = fields(l, r);
                 let byte: Byte = field.clone().into();
                 assert_eq!(
                     field,
@@ -247,192 +264,60 @@ mod spec {
     #[test]
     fn lda_full() {
         let mut mix = Mix::default();
-        mix.memory[2000] = Word {
-            sign: Sign::Minus,
-            bytes: [
-                Byte::new(1),
-                Byte::new(16),
-                Byte::new(3),
-                Byte::new(5),
-                Byte::new(4),
-            ],
-        };
-        assert_eq!(
-            mix.exec(Instruction::lda(Address::new(2000), None, None)).a,
-            Word {
-                sign: Sign::Minus,
-                bytes: [
-                    Byte::new(1),
-                    Byte::new(16),
-                    Byte::new(3),
-                    Byte::new(5),
-                    Byte::new(4),
-                ],
-            }
-        );
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(lda(Address::new(2000), None, None));
+
+        assert_eq!(mix.a, Word::new(Minus, 1, 16, 3, 5, 4));
     }
 
     #[test]
     fn lda_just_bytes() {
         let mut mix = Mix::default();
-        mix.memory[2000] = Word {
-            sign: Sign::Minus,
-            bytes: [
-                Byte::new(1),
-                Byte::new(16),
-                Byte::new(3),
-                Byte::new(5),
-                Byte::new(4),
-            ],
-        };
-        assert_eq!(
-            mix.exec(Instruction::lda(
-                Address::new(2000),
-                None,
-                Some(FieldSpecification::new(1, 5))
-            ))
-            .a,
-            Word {
-                sign: Sign::Plus,
-                bytes: [
-                    Byte::new(1),
-                    Byte::new(16),
-                    Byte::new(3),
-                    Byte::new(5),
-                    Byte::new(4),
-                ],
-            }
-        );
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(1, 5))));
+
+        assert_eq!(mix.a, Word::new(Plus, 1, 16, 3, 5, 4));
     }
 
     #[test]
     fn lda_second_half() {
         let mut mix = Mix::default();
-        mix.memory[2000] = Word {
-            sign: Sign::Minus,
-            bytes: [
-                Byte::new(1),
-                Byte::new(16),
-                Byte::new(3),
-                Byte::new(5),
-                Byte::new(4),
-            ],
-        };
-        assert_eq!(
-            mix.exec(Instruction::lda(
-                Address::new(2000),
-                None,
-                Some(FieldSpecification::new(3, 5))
-            ))
-            .a,
-            Word {
-                sign: Sign::Plus,
-                bytes: [
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(3),
-                    Byte::new(5),
-                    Byte::new(4),
-                ],
-            }
-        );
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(3, 5))));
+
+        assert_eq!(mix.a, Word::new(Plus, 0, 0, 3, 5, 4));
     }
 
     #[test]
     fn lda_first_half() {
         let mut mix = Mix::default();
-        mix.memory[2000] = Word {
-            sign: Sign::Minus,
-            bytes: [
-                Byte::new(1),
-                Byte::new(16),
-                Byte::new(3),
-                Byte::new(5),
-                Byte::new(4),
-            ],
-        };
-        assert_eq!(
-            mix.exec(Instruction::lda(
-                Address::new(2000),
-                None,
-                Some(FieldSpecification::new(0, 3))
-            ))
-            .a,
-            Word {
-                sign: Sign::Minus,
-                bytes: [
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(1),
-                    Byte::new(16),
-                    Byte::new(3),
-                ],
-            }
-        );
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(0, 3))));
+
+        assert_eq!(mix.a, Word::new(Minus, 0, 0, 1, 16, 3));
     }
 
     #[test]
     fn lda_single_byte() {
         let mut mix = Mix::default();
-        mix.memory[2000] = Word {
-            sign: Sign::Minus,
-            bytes: [
-                Byte::new(1),
-                Byte::new(16),
-                Byte::new(3),
-                Byte::new(5),
-                Byte::new(4),
-            ],
-        };
-        assert_eq!(
-            mix.exec(Instruction::lda(
-                Address::new(2000),
-                None,
-                Some(FieldSpecification::new(4, 4))
-            ))
-            .a,
-            Word {
-                sign: Sign::Plus,
-                bytes: [
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(5),
-                ],
-            }
-        );
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(4, 4))));
+
+        assert_eq!(mix.a, Word::new(Plus, 0, 0, 0, 0, 5));
     }
+
     #[test]
     fn lda_just_sign() {
         let mut mix = Mix::default();
-        mix.memory[2000] = Word {
-            sign: Sign::Minus,
-            bytes: [
-                Byte::new(1),
-                Byte::new(16),
-                Byte::new(3),
-                Byte::new(5),
-                Byte::new(4),
-            ],
-        };
-        assert_eq!(
-            mix.exec(Instruction::lda(
-                Address::new(2000),
-                None,
-                Some(FieldSpecification::new(0, 0))
-            ))
-            .a,
-            Word {
-                sign: Sign::Minus,
-                bytes: [
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(0),
-                    Byte::new(0),
-                ],
-            }
-        );
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(lda(Address::new(2000), None, Some(fields(0, 0))));
+
+        assert_eq!(mix.a, Word::new(Minus, 0, 0, 0, 0, 0));
     }
 }
