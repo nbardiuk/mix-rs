@@ -6,7 +6,7 @@ const WORD_BYTES: u8 = 5;
 
 impl Byte {
     fn new(b: u8) -> Byte {
-        assert!(b < BYTE_SIZE, "Byte value should be smaller than 64");
+        debug_assert!(b < BYTE_SIZE, "Byte value should be smaller than 64");
         Byte(b)
     }
 }
@@ -19,6 +19,14 @@ enum Sign {
 impl Default for Sign {
     fn default() -> Self {
         Sign::Plus
+    }
+}
+impl Sign {
+    fn opposite(&self) -> Self {
+        match self {
+            Sign::Plus => Sign::Minus,
+            Sign::Minus => Sign::Plus,
+        }
     }
 }
 
@@ -59,6 +67,12 @@ impl Word {
             bytes[index_to] = self.bytes[index_from];
         }
         Self { sign, bytes }
+    }
+
+    fn negate(self) -> Self {
+        let mut word = self;
+        word.sign = self.sign.opposite();
+        word
     }
 }
 
@@ -274,13 +288,11 @@ impl Mix {
                 self
             }
             Operation::LDAN => {
-                self.a = self.load(instruction);
-                self.a.sign = Sign::Minus;
+                self.a = self.load(instruction).negate();
                 self
             }
             Operation::LDXN => {
-                self.x = self.load(instruction);
-                self.x.sign = Sign::Minus;
+                self.x = self.load(instruction).negate();
                 self
             }
         }
@@ -386,40 +398,40 @@ mod spec {
     #[test]
     fn ldan() {
         assert(
-            "should load negative word",
-            Word::new(Plus, 1, 16, 3, 5, 4),
-            None,
+            "should load full word with opposite sign",
             Word::new(Minus, 1, 16, 3, 5, 4),
+            None,
+            Word::new(Plus, 1, 16, 3, 5, 4),
         );
         assert(
             "should load just bytes",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(1, 5),
             Word::new(Minus, 1, 16, 3, 5, 4),
         );
         assert(
             "should load only second half",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(3, 5),
             Word::new(Minus, 0, 0, 3, 5, 4),
         );
         assert(
             "should load only first half",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(0, 3),
-            Word::new(Minus, 0, 0, 1, 16, 3),
+            Word::new(Plus, 0, 0, 1, 16, 3),
         );
         assert(
             "should load single byte",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(4, 4),
             Word::new(Minus, 0, 0, 0, 0, 5),
         );
         assert(
-            "should not load just sign",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            "should just toggle sign",
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(0, 0),
-            Word::new(Minus, 0, 0, 0, 0, 0),
+            Word::new(Plus, 0, 0, 0, 0, 0),
         );
         fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
             let mut mix = Mix::default();
@@ -482,40 +494,40 @@ mod spec {
     #[test]
     fn ldxn() {
         assert(
-            "should load negative word",
-            Word::new(Plus, 1, 16, 3, 5, 4),
-            None,
+            "should load full word with opposite sign",
             Word::new(Minus, 1, 16, 3, 5, 4),
+            None,
+            Word::new(Plus, 1, 16, 3, 5, 4),
         );
         assert(
             "should load just bytes",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(1, 5),
             Word::new(Minus, 1, 16, 3, 5, 4),
         );
         assert(
             "should load only second half",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(3, 5),
             Word::new(Minus, 0, 0, 3, 5, 4),
         );
         assert(
             "should load only first half",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(0, 3),
-            Word::new(Minus, 0, 0, 1, 16, 3),
+            Word::new(Plus, 0, 0, 1, 16, 3),
         );
         assert(
             "should load single byte",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(4, 4),
             Word::new(Minus, 0, 0, 0, 0, 5),
         );
         assert(
-            "should not load just sign",
-            Word::new(Plus, 1, 16, 3, 5, 4),
+            "should just toggle sign",
+            Word::new(Minus, 1, 16, 3, 5, 4),
             fields(0, 0),
-            Word::new(Minus, 0, 0, 0, 0, 0),
+            Word::new(Plus, 0, 0, 0, 0, 0),
         );
         fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
             let mut mix = Mix::default();
