@@ -49,41 +49,45 @@ impl Word {
         }
     }
 
-    fn slice(self, field_spec: FieldSpecification) -> Self {
-        let sign = if field_spec.l > 0 {
-            Sign::default()
-        } else {
-            self.sign
-        };
-        let mut bytes = [Byte::default(); WORD_BYTES as usize];
-        let len = (field_spec.r - field_spec.l) + 1;
-        for i in 0..len {
-            if field_spec.l + i == 0 {
-                continue;
-            };
-            let index_from = (field_spec.l + i - 1) as usize;
-            let index_to = (WORD_BYTES + i - len) as usize;
-            bytes[index_to] = self.bytes[index_from];
+    fn slice(self, m: Modification) -> Self {
+        match m {
+            Modification::Field { l, r } => {
+                let sign = if l > 0 { Sign::default() } else { self.sign };
+                let mut bytes = [Byte::default(); WORD_BYTES as usize];
+                let len = (r - l) + 1;
+                for i in 0..len {
+                    if l + i == 0 {
+                        continue;
+                    };
+                    let index_from = (l + i - 1) as usize;
+                    let index_to = (WORD_BYTES + i - len) as usize;
+                    bytes[index_to] = self.bytes[index_from];
+                }
+                Self { sign, bytes }
+            }
         }
-        Self { sign, bytes }
     }
 
-    fn merge(self, word: Word, field_spec: FieldSpecification) -> Self {
-        let mut result = self;
-        if field_spec.l == 0 {
-            result.sign = word.sign;
-        };
+    fn merge(self, word: Word, m: Modification) -> Self {
+        match m {
+            Modification::Field { l, r } => {
+                let mut result = self;
+                if l == 0 {
+                    result.sign = word.sign;
+                };
 
-        let len = (field_spec.r - field_spec.l) + 1;
-        for i in 0..len {
-            if field_spec.l + i == 0 {
-                continue;
-            };
-            let index_from = (WORD_BYTES + i - len) as usize;
-            let index_to = (field_spec.l + i - 1) as usize;
-            result.bytes[index_to] = word.bytes[index_from];
+                let len = (r - l) + 1;
+                for i in 0..len {
+                    if l + i == 0 {
+                        continue;
+                    };
+                    let index_from = (WORD_BYTES + i - len) as usize;
+                    let index_to = (l + i - 1) as usize;
+                    result.bytes[index_to] = word.bytes[index_from];
+                }
+                result
+            }
         }
-        result
     }
 
     fn negate(self) -> Self {
@@ -217,25 +221,26 @@ impl Default for Mix {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct FieldSpecification {
-    l: u8,
-    r: u8,
+enum Modification {
+    Field { l: u8, r: u8 },
 }
-impl From<Byte> for FieldSpecification {
+impl From<Byte> for Modification {
     fn from(b: Byte) -> Self {
         let l = b.0 / 8;
         let r = b.0 % 8;
-        Self { l, r }
+        Modification::field(l, r)
     }
 }
-impl Into<Byte> for FieldSpecification {
+impl Into<Byte> for Modification {
     fn into(self) -> Byte {
-        Byte::new(self.l * 8 + self.r)
+        match self {
+            Modification::Field { l, r } => Byte::new(l * 8 + r),
+        }
     }
 }
-impl FieldSpecification {
-    fn new(l: u8, r: u8) -> Self {
-        Self { l, r }
+impl Modification {
+    fn field(l: u8, r: u8) -> Self {
+        Modification::Field { l, r }
     }
 }
 
@@ -294,18 +299,26 @@ enum Operation {
     STJ,
     STZ,
 }
+impl Operation {
+    fn default_modification(self) -> Modification {
+        match self {
+            Operation::STJ => Modification::field(0, 2),
+            _ => Modification::field(0, 5),
+        }
+    }
+}
 struct Instruction {
     operation: Operation,
     address: Address,
     index: Option<IndexNumber>,
-    modification: Byte,
+    modification: Option<Modification>,
 }
 impl Instruction {
     fn new(
         operation: Operation,
         address: Address,
         index: Option<IndexNumber>,
-        modification: Byte,
+        modification: Option<Modification>,
     ) -> Self {
         Instruction {
             operation,
@@ -328,16 +341,20 @@ impl Mix {
     }
 
     fn load(&self, instruction: Instruction) -> Word {
-        self.contents(&instruction.address)
-            .slice(FieldSpecification::from(instruction.modification))
+        let operation = instruction.operation;
+        let field = instruction
+            .modification
+            .unwrap_or_else(|| operation.default_modification());
+        self.contents(&instruction.address).slice(field)
     }
 
     fn store(&mut self, word: Word, instruction: Instruction) {
         let cell = self.contents(&instruction.address);
-        self.save_contents(
-            &instruction.address,
-            cell.merge(word, FieldSpecification::from(instruction.modification)),
-        );
+        let operation = instruction.operation;
+        let field = instruction
+            .modification
+            .unwrap_or_else(|| operation.default_modification());
+        self.save_contents(&instruction.address, cell.merge(word, field));
     }
 
     fn exec(mut self, instruction: Instruction) -> Self {
@@ -439,16 +456,16 @@ mod spec {
     fn field_byte_conversions() {
         for l in 0..WORD_BYTES + 1 {
             for r in l..WORD_BYTES + 1 {
-                let field = FieldSpecification::new(l, r);
+                let field = Modification::field(l, r);
                 let byte: Byte = field.clone().into();
                 assert_eq!(
                     field,
-                    FieldSpecification::from(byte.clone()),
+                    Modification::from(byte.clone()),
                     "round trip conversion of field specification through byte should be idempotent"
                 );
                 assert_eq!(
                     byte.clone(),
-                    FieldSpecification::from(byte.clone()).into(),
+                    Modification::from(byte.clone()).into(),
                     "round trip conversion of byte through field specification through should be idempotent"
                 );
             }
@@ -459,19 +476,13 @@ mod spec {
         operation: Operation,
         address: i16,
         index: Option<IndexNumber>,
-        f: Option<FieldSpecification>,
+        f: Option<Modification>,
     ) -> Instruction {
-        Instruction::new(
-            operation,
-            Address::new(address),
-            index,
-            f.unwrap_or_else(|| FieldSpecification::new(0, WORD_BYTES))
-                .into(),
-        )
+        Instruction::new(operation, Address::new(address), index, f)
     }
 
-    fn fields(l: u8, r: u8) -> Option<FieldSpecification> {
-        Some(FieldSpecification::new(l, r))
+    fn fields(l: u8, r: u8) -> Option<Modification> {
+        Some(Modification::field(l, r))
     }
 
     #[test]
@@ -482,7 +493,7 @@ mod spec {
         assert(fields(0, 3), Word::new(Minus, 0, 0, 1, 16, 3));
         assert(fields(4, 4), Word::new(Plus, 0, 0, 0, 0, 5));
         assert(fields(0, 0), Word::new(Minus, 0, 0, 0, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -502,7 +513,7 @@ mod spec {
         assert(fields(0, 3), Word::new(Plus, 0, 0, 1, 16, 3));
         assert(fields(4, 4), Word::new(Minus, 0, 0, 0, 0, 5));
         assert(fields(0, 0), Word::new(Plus, 0, 0, 0, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -522,7 +533,7 @@ mod spec {
         assert(fields(0, 3), Word::new(Minus, 0, 0, 1, 16, 3));
         assert(fields(4, 4), Word::new(Plus, 0, 0, 0, 0, 5));
         assert(fields(0, 0), Word::new(Minus, 0, 0, 0, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -542,7 +553,7 @@ mod spec {
         assert(fields(0, 3), Word::new(Plus, 0, 0, 1, 16, 3));
         assert(fields(4, 4), Word::new(Minus, 0, 0, 0, 0, 5));
         assert(fields(0, 0), Word::new(Plus, 0, 0, 0, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -560,7 +571,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Minus, 1, 16));
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -578,7 +589,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Minus, 1, 16));
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -596,7 +607,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Minus, 1, 16));
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -614,7 +625,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Minus, 1, 16));
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -632,7 +643,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Minus, 1, 16));
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -650,7 +661,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Minus, 1, 16));
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -668,7 +679,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Plus, 1, 16));
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -686,7 +697,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Plus, 1, 16));
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -704,7 +715,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Plus, 1, 16));
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -722,7 +733,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Plus, 1, 16));
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -740,7 +751,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Plus, 1, 16));
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -758,7 +769,7 @@ mod spec {
         assert(fields(0, 2), Index::new(Plus, 1, 16));
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
-        fn assert(f: Option<FieldSpecification>, expected: Index) {
+        fn assert(f: Option<Modification>, expected: Index) {
             let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
@@ -778,7 +789,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 9, 0, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Word::new(Plus, 6, 7, 8, 9, 0);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -799,7 +810,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 9, 0, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Word::new(Plus, 6, 7, 8, 9, 0);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -820,7 +831,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -841,7 +852,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -862,7 +873,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -883,7 +894,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -904,7 +915,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -925,7 +936,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -940,13 +951,14 @@ mod spec {
 
     #[test]
     fn stj() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
+        assert(None, Word::new(Plus, 6, 7, 3, 4, 5));
+        assert(fields(0, 2), Word::new(Plus, 6, 7, 3, 4, 5));
         assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
         assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
         assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let before = Jump::new(6, 7);
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
@@ -967,7 +979,7 @@ mod spec {
         assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
         assert(fields(2, 3), Word::new(Minus, 1, 0, 0, 4, 5));
         assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
-        fn assert(f: Option<FieldSpecification>, expected: Word) {
+        fn assert(f: Option<Modification>, expected: Word) {
             let mut mix = Mix::default();
             mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
 
