@@ -59,11 +59,6 @@ impl Word {
 
 // Registers
 #[derive(Default)]
-struct Extension {
-    sign: Sign,
-    bytes: [Byte; 5],
-}
-#[derive(Default)]
 struct Index {
     sign: Sign,
     bytes: [Byte; 2],
@@ -96,7 +91,7 @@ impl Default for Comparison {
 
 struct Mix {
     a: Word,
-    x: Extension,
+    x: Word,
     i1: Index,
     i2: Index,
     i3: Index,
@@ -144,11 +139,6 @@ impl Into<Byte> for FieldSpecification {
         Byte::new(self.l * 8 + self.r)
     }
 }
-impl Default for FieldSpecification {
-    fn default() -> Self {
-        Self { l: 0, r: 5 }
-    }
-}
 impl FieldSpecification {
     fn new(l: u8, r: u8) -> Self {
         Self { l, r }
@@ -184,6 +174,7 @@ impl Address {
 }
 enum Operation {
     LDA,
+    LDX,
 }
 struct Instruction {
     operation: Operation,
@@ -208,7 +199,21 @@ impl Instruction {
 }
 
 fn lda(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
-    Instruction::new(Operation::LDA, address, index, f.unwrap_or_default().into())
+    Instruction::new(
+        Operation::LDA,
+        address,
+        index,
+        f.unwrap_or_else(|| fields(0, 5)).into(),
+    )
+}
+
+fn ldx(address: Address, index: Option<IndexNumber>, f: Option<FieldSpecification>) -> Instruction {
+    Instruction::new(
+        Operation::LDX,
+        address,
+        index,
+        f.unwrap_or_else(|| fields(0, 5)).into(),
+    )
 }
 
 fn fields(l: u8, r: u8) -> FieldSpecification {
@@ -220,12 +225,20 @@ impl Mix {
         let i = address.bytes[0].0 as usize * 64 + address.bytes[1].0 as usize;
         self.memory[i]
     }
+
+    fn load(&self, instruction: Instruction) -> Word {
+        self.contents(instruction.address)
+            .slice(FieldSpecification::from(instruction.modification))
+    }
+
     fn exec(mut self, instruction: Instruction) -> Self {
         match instruction.operation {
-            LDA => {
-                self.a = self
-                    .contents(instruction.address)
-                    .slice(FieldSpecification::from(instruction.modification));
+            Operation::LDA => {
+                self.a = self.load(instruction);
+                self
+            }
+            Operation::LDX => {
+                self.x = self.load(instruction);
                 self
             }
         }
@@ -319,5 +332,65 @@ mod spec {
         let mix = mix.exec(lda(Address::new(2000), None, Some(fields(0, 0))));
 
         assert_eq!(mix.a, Word::new(Minus, 0, 0, 0, 0, 0));
+    }
+
+    #[test]
+    fn ldx_full() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldx(Address::new(2000), None, None));
+
+        assert_eq!(mix.x, Word::new(Minus, 1, 16, 3, 5, 4));
+    }
+
+    #[test]
+    fn ldx_just_bytes() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(1, 5))));
+
+        assert_eq!(mix.x, Word::new(Plus, 1, 16, 3, 5, 4));
+    }
+
+    #[test]
+    fn ldx_second_half() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(3, 5))));
+
+        assert_eq!(mix.x, Word::new(Plus, 0, 0, 3, 5, 4));
+    }
+
+    #[test]
+    fn ldx_first_half() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(0, 3))));
+
+        assert_eq!(mix.x, Word::new(Minus, 0, 0, 1, 16, 3));
+    }
+
+    #[test]
+    fn ldx_single_byte() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(4, 4))));
+
+        assert_eq!(mix.x, Word::new(Plus, 0, 0, 0, 0, 5));
+    }
+
+    #[test]
+    fn ldx_just_sign() {
+        let mut mix = Mix::default();
+        mix.memory[2000] = Word::new(Minus, 1, 16, 3, 5, 4);
+
+        let mix = mix.exec(ldx(Address::new(2000), None, Some(fields(0, 0))));
+
+        assert_eq!(mix.x, Word::new(Minus, 0, 0, 0, 0, 0));
     }
 }
