@@ -355,6 +355,7 @@ fn main() {
 #[cfg(test)]
 mod spec {
     use super::*;
+    use Operation::*;
     use Sign::*;
 
     #[test]
@@ -377,7 +378,7 @@ mod spec {
         }
     }
 
-    fn loading(
+    fn instruction(
         operation: Operation,
         address: i16,
         index: Option<IndexNumber>,
@@ -398,686 +399,318 @@ mod spec {
 
     #[test]
     fn lda() {
-        assert(
-            "should load full word",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            None,
-            Word::new(Minus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load just bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(1, 5),
-            Word::new(Plus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load only second half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(3, 5),
-            Word::new(Plus, 0, 0, 3, 5, 4),
-        );
-        assert(
-            "should load only first half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 3),
-            Word::new(Minus, 0, 0, 1, 16, 3),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Word::new(Plus, 0, 0, 0, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Word::new(Minus, 0, 0, 0, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+        assert(None, Word::new(Minus, 1, 16, 3, 5, 4));
+        assert(fields(1, 5), Word::new(Plus, 1, 16, 3, 5, 4));
+        assert(fields(3, 5), Word::new(Plus, 0, 0, 3, 5, 4));
+        assert(fields(0, 3), Word::new(Minus, 0, 0, 1, 16, 3));
+        assert(fields(4, 4), Word::new(Plus, 0, 0, 0, 0, 5));
+        assert(fields(0, 0), Word::new(Minus, 0, 0, 0, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LDA, 2000, None, f));
+            let mix = mix.exec(instruction(LDA, 2000, None, f.clone()));
 
-            assert_eq!(mix.a, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.a, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ldan() {
-        assert(
-            "should load full word with opposite sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            None,
-            Word::new(Plus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load just bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(1, 5),
-            Word::new(Minus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load only second half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(3, 5),
-            Word::new(Minus, 0, 0, 3, 5, 4),
-        );
-        assert(
-            "should load only first half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 3),
-            Word::new(Plus, 0, 0, 1, 16, 3),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Word::new(Minus, 0, 0, 0, 0, 5),
-        );
-        assert(
-            "should just toggle sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Word::new(Plus, 0, 0, 0, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+        assert(None, Word::new(Plus, 1, 16, 3, 5, 4));
+        assert(fields(1, 5), Word::new(Minus, 1, 16, 3, 5, 4));
+        assert(fields(3, 5), Word::new(Minus, 0, 0, 3, 5, 4));
+        assert(fields(0, 3), Word::new(Plus, 0, 0, 1, 16, 3));
+        assert(fields(4, 4), Word::new(Minus, 0, 0, 0, 0, 5));
+        assert(fields(0, 0), Word::new(Plus, 0, 0, 0, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LDAN, 2000, None, f));
+            let mix = mix.exec(instruction(LDAN, 2000, None, f.clone()));
 
-            assert_eq!(mix.a, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.a, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ldx() {
-        assert(
-            "should load full word",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            None,
-            Word::new(Minus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load just bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(1, 5),
-            Word::new(Plus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load only second half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(3, 5),
-            Word::new(Plus, 0, 0, 3, 5, 4),
-        );
-        assert(
-            "should load only first half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 3),
-            Word::new(Minus, 0, 0, 1, 16, 3),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Word::new(Plus, 0, 0, 0, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Word::new(Minus, 0, 0, 0, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+        assert(None, Word::new(Minus, 1, 16, 3, 5, 4));
+        assert(fields(1, 5), Word::new(Plus, 1, 16, 3, 5, 4));
+        assert(fields(3, 5), Word::new(Plus, 0, 0, 3, 5, 4));
+        assert(fields(0, 3), Word::new(Minus, 0, 0, 1, 16, 3));
+        assert(fields(4, 4), Word::new(Plus, 0, 0, 0, 0, 5));
+        assert(fields(0, 0), Word::new(Minus, 0, 0, 0, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LDX, 2000, None, f));
+            let mix = mix.exec(instruction(LDX, 2000, None, f.clone()));
 
-            assert_eq!(mix.x, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.x, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ldxn() {
-        assert(
-            "should load full word with opposite sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            None,
-            Word::new(Plus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load just bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(1, 5),
-            Word::new(Minus, 1, 16, 3, 5, 4),
-        );
-        assert(
-            "should load only second half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(3, 5),
-            Word::new(Minus, 0, 0, 3, 5, 4),
-        );
-        assert(
-            "should load only first half",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 3),
-            Word::new(Plus, 0, 0, 1, 16, 3),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Word::new(Minus, 0, 0, 0, 0, 5),
-        );
-        assert(
-            "should just toggle sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Word::new(Plus, 0, 0, 0, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Word) {
+        assert(None, Word::new(Plus, 1, 16, 3, 5, 4));
+        assert(fields(1, 5), Word::new(Minus, 1, 16, 3, 5, 4));
+        assert(fields(3, 5), Word::new(Minus, 0, 0, 3, 5, 4));
+        assert(fields(0, 3), Word::new(Plus, 0, 0, 1, 16, 3));
+        assert(fields(4, 4), Word::new(Minus, 0, 0, 0, 0, 5));
+        assert(fields(0, 0), Word::new(Plus, 0, 0, 0, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LDXN, 2000, None, f));
+            let mix = mix.exec(instruction(LDXN, 2000, None, f.clone()));
 
-            assert_eq!(mix.x, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.x, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld1() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Plus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Minus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Plus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Minus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Plus, 5, 4));
+        assert(fields(0, 2), Index::new(Minus, 1, 16));
+        assert(fields(4, 4), Index::new(Plus, 0, 5));
+        assert(fields(0, 0), Index::new(Minus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD1, 2000, None, f));
+            let mix = mix.exec(instruction(LD1, 2000, None, f.clone()));
 
-            assert_eq!(mix.i1, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i1, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld2() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Plus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Minus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Plus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Minus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Plus, 5, 4));
+        assert(fields(0, 2), Index::new(Minus, 1, 16));
+        assert(fields(4, 4), Index::new(Plus, 0, 5));
+        assert(fields(0, 0), Index::new(Minus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD2, 2000, None, f));
+            let mix = mix.exec(instruction(LD2, 2000, None, f.clone()));
 
-            assert_eq!(mix.i2, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i2, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld3() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Plus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Minus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Plus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Minus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Plus, 5, 4));
+        assert(fields(0, 2), Index::new(Minus, 1, 16));
+        assert(fields(4, 4), Index::new(Plus, 0, 5));
+        assert(fields(0, 0), Index::new(Minus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD3, 2000, None, f));
+            let mix = mix.exec(instruction(LD3, 2000, None, f.clone()));
 
-            assert_eq!(mix.i3, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i3, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld4() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Plus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Minus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Plus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Minus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Plus, 5, 4));
+        assert(fields(0, 2), Index::new(Minus, 1, 16));
+        assert(fields(4, 4), Index::new(Plus, 0, 5));
+        assert(fields(0, 0), Index::new(Minus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD4, 2000, None, f));
+            let mix = mix.exec(instruction(LD4, 2000, None, f.clone()));
 
-            assert_eq!(mix.i4, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i4, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld5() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Plus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Minus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Plus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Minus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Plus, 5, 4));
+        assert(fields(0, 2), Index::new(Minus, 1, 16));
+        assert(fields(4, 4), Index::new(Plus, 0, 5));
+        assert(fields(0, 0), Index::new(Minus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD5, 2000, None, f));
+            let mix = mix.exec(instruction(LD5, 2000, None, f.clone()));
 
-            assert_eq!(mix.i5, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i5, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld6() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Plus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Minus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Plus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Minus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Plus, 5, 4));
+        assert(fields(0, 2), Index::new(Minus, 1, 16));
+        assert(fields(4, 4), Index::new(Plus, 0, 5));
+        assert(fields(0, 0), Index::new(Minus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD6, 2000, None, f));
+            let mix = mix.exec(instruction(LD6, 2000, None, f.clone()));
 
-            assert_eq!(mix.i6, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i6, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld1n() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Minus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Plus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Minus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Plus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Minus, 5, 4));
+        assert(fields(0, 2), Index::new(Plus, 1, 16));
+        assert(fields(4, 4), Index::new(Minus, 0, 5));
+        assert(fields(0, 0), Index::new(Plus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD1N, 2000, None, f));
+            let mix = mix.exec(instruction(LD1N, 2000, None, f.clone()));
 
-            assert_eq!(mix.i1, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i1, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld2n() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Minus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Plus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Minus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Plus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Minus, 5, 4));
+        assert(fields(0, 2), Index::new(Plus, 1, 16));
+        assert(fields(4, 4), Index::new(Minus, 0, 5));
+        assert(fields(0, 0), Index::new(Plus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD2N, 2000, None, f));
+            let mix = mix.exec(instruction(LD2N, 2000, None, f.clone()));
 
-            assert_eq!(mix.i2, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i2, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld3n() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Minus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Plus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Minus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Plus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Minus, 5, 4));
+        assert(fields(0, 2), Index::new(Plus, 1, 16));
+        assert(fields(4, 4), Index::new(Minus, 0, 5));
+        assert(fields(0, 0), Index::new(Plus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD3N, 2000, None, f));
+            let mix = mix.exec(instruction(LD3N, 2000, None, f.clone()));
 
-            assert_eq!(mix.i3, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i3, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld4n() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Minus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Plus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Minus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Plus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Minus, 5, 4));
+        assert(fields(0, 2), Index::new(Plus, 1, 16));
+        assert(fields(4, 4), Index::new(Minus, 0, 5));
+        assert(fields(0, 0), Index::new(Plus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD4N, 2000, None, f));
+            let mix = mix.exec(instruction(LD4N, 2000, None, f.clone()));
 
-            assert_eq!(mix.i4, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i4, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld5n() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Minus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Plus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Minus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Plus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Minus, 5, 4));
+        assert(fields(0, 2), Index::new(Plus, 1, 16));
+        assert(fields(4, 4), Index::new(Minus, 0, 5));
+        assert(fields(0, 0), Index::new(Plus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD5N, 2000, None, f));
+            let mix = mix.exec(instruction(LD5N, 2000, None, f.clone()));
 
-            assert_eq!(mix.i5, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i5, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn ld6n() {
-        assert(
-            "should load only bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 5),
-            Index::new(Minus, 5, 4),
-        );
-        assert(
-            "should load sign and bytes",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 2),
-            Index::new(Plus, 1, 16),
-        );
-        assert(
-            "should load single byte",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(4, 4),
-            Index::new(Minus, 0, 5),
-        );
-        assert(
-            "should load just sign",
-            Word::new(Minus, 1, 16, 3, 5, 4),
-            fields(0, 0),
-            Index::new(Plus, 0, 0),
-        );
-        fn assert(message: &str, before: Word, f: Option<FieldSpecification>, expected: Index) {
+        assert(fields(4, 5), Index::new(Minus, 5, 4));
+        assert(fields(0, 2), Index::new(Plus, 1, 16));
+        assert(fields(4, 4), Index::new(Minus, 0, 5));
+        assert(fields(0, 0), Index::new(Plus, 0, 0));
+        fn assert(f: Option<FieldSpecification>, expected: Index) {
+            let before = Word::new(Minus, 1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(loading(Operation::LD6N, 2000, None, f));
+            let mix = mix.exec(instruction(LD6N, 2000, None, f.clone()));
 
-            assert_eq!(mix.i6, expected, "{}", message);
+            assert_eq!(mix.memory[2000], before, "should not change");
+            assert_eq!(mix.i6, expected, "for specification {:?}", f);
         }
     }
 
     #[test]
     fn sta() {
-        assert(
-            "should store full word",
-            Word::new(Minus, 1, 2, 3, 4, 5),
-            Word::new(Plus, 6, 7, 8, 9, 0),
-            None,
-            Word::new(Plus, 6, 7, 8, 9, 0),
-        );
-        assert(
-            "should store just bytes",
-            Word::new(Minus, 1, 2, 3, 4, 5),
-            Word::new(Plus, 6, 7, 8, 9, 0),
-            fields(1, 5),
-            Word::new(Minus, 6, 7, 8, 9, 0),
-        );
-        assert(
-            "should store only last byte",
-            Word::new(Minus, 1, 2, 3, 4, 5),
-            Word::new(Plus, 6, 7, 8, 9, 0),
-            fields(5, 5),
-            Word::new(Minus, 1, 2, 3, 4, 0),
-        );
-        assert(
-            "should store single byte",
-            Word::new(Minus, 1, 2, 3, 4, 5),
-            Word::new(Plus, 6, 7, 8, 9, 0),
-            fields(2, 2),
-            Word::new(Minus, 1, 0, 3, 4, 5),
-        );
-        assert(
-            "should store couple byte",
-            Word::new(Minus, 1, 2, 3, 4, 5),
-            Word::new(Plus, 6, 7, 8, 9, 0),
-            fields(2, 3),
-            Word::new(Minus, 1, 9, 0, 4, 5),
-        );
-        assert(
-            "should store also sign",
-            Word::new(Minus, 1, 2, 3, 4, 5),
-            Word::new(Plus, 6, 7, 8, 9, 0),
-            fields(0, 1),
-            Word::new(Plus, 0, 2, 3, 4, 5),
-        );
-        fn assert(
-            message: &str,
-            cell: Word,
-            register: Word,
-            f: Option<FieldSpecification>,
-            expected: Word,
-        ) {
+        assert(None, Word::new(Plus, 6, 7, 8, 9, 0));
+        assert(fields(1, 5), Word::new(Minus, 6, 7, 8, 9, 0));
+        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 0));
+        assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
+        assert(fields(2, 3), Word::new(Minus, 1, 9, 0, 4, 5));
+        assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
+        fn assert(f: Option<FieldSpecification>, expected: Word) {
+            let before = Word::new(Plus, 6, 7, 8, 9, 0);
             let mut mix = Mix::default();
-            mix.memory[2000] = cell;
-            mix.a = register;
+            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.a = before;
 
-            let mix = mix.exec(loading(Operation::STA, 2000, None, f));
+            let mix = mix.exec(instruction(STA, 2000, None, f.clone()));
 
-            assert_eq!(mix.memory[2000], expected, "{}", message);
+            assert_eq!(mix.a, before, "should not change");
+            assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
         }
     }
 }
