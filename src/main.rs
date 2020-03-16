@@ -1,19 +1,23 @@
 const BYTE_SIZE: u8 = 64;
 const WORD_BYTES: u8 = 5;
 
-#[derive(Debug, PartialEq, Clone, Copy, Default)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Default)]
 struct Byte(pub u8);
 impl Byte {
     fn new(b: u8) -> Byte {
-        debug_assert!(b < BYTE_SIZE, "Byte value should be smaller than 64");
+        debug_assert!(
+            b < BYTE_SIZE,
+            "Byte value should be smaller than {}",
+            BYTE_SIZE
+        );
         Byte(b)
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 enum Sign {
-    Plus,
     Minus,
+    Plus,
 }
 impl Default for Sign {
     fn default() -> Self {
@@ -29,7 +33,7 @@ impl Sign {
     }
 }
 
-#[derive(Debug, PartialEq, Default, Copy, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Default, Copy, Clone)]
 struct Word {
     sign: Sign,
     bytes: [Byte; WORD_BYTES as usize],
@@ -94,6 +98,36 @@ impl Word {
         let mut word = self;
         word.sign = self.sign.opposite();
         word
+    }
+
+    fn overflowing_add(self, other: Self) -> (Self, bool) {
+        let mut a = self;
+        let mut b = other;
+
+        let mut carry = 0;
+        if a.sign == b.sign {
+            for i in (0..WORD_BYTES as usize).rev() {
+                let sum = a.bytes[i].0 + b.bytes[i].0 + carry;
+                a.bytes[i] = Byte::new(sum % BYTE_SIZE);
+                carry = sum / BYTE_SIZE;
+            }
+        } else {
+            if a < b.negate() {
+                std::mem::swap(&mut a, &mut b);
+            }
+            for i in (0..WORD_BYTES as usize).rev() {
+                let mut s = a.bytes[i].0 as i16 - b.bytes[i].0 as i16 - carry as i16;
+                if s < 0 {
+                    s += BYTE_SIZE as i16;
+                    carry = 1;
+                } else {
+                    carry = 0;
+                }
+                a.bytes[i] = Byte::new(s.abs() as u8 % BYTE_SIZE);
+            }
+        }
+
+        (a, carry != 0)
     }
 }
 
@@ -166,6 +200,7 @@ impl Into<Word> for Jump {
     }
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
 enum Toggle {
     On,
     Off,
@@ -173,6 +208,15 @@ enum Toggle {
 impl Default for Toggle {
     fn default() -> Self {
         Toggle::Off
+    }
+}
+impl From<bool> for Toggle {
+    fn from(b: bool) -> Self {
+        if b {
+            Self::On
+        } else {
+            Self::Off
+        }
     }
 }
 enum Comparison {
@@ -298,6 +342,7 @@ enum Operation {
     ST6,
     STJ,
     STZ,
+    ADD,
 }
 impl Operation {
     fn default_modification(self) -> Modification {
@@ -437,14 +482,17 @@ impl Mix {
             Operation::STZ => {
                 self.store(Word::default(), instruction);
             }
+            Operation::ADD => {
+                let (sum, overflows) = self.a.overflowing_add(self.load(instruction));
+                self.a = sum;
+                self.overflow = Toggle::from(overflows);
+            }
         };
         self
     }
 }
 
-fn main() {
-    println!("Hello, world!");
-}
+fn main() {}
 
 #[cfg(test)]
 mod spec {
@@ -986,6 +1034,96 @@ mod spec {
             let mix = mix.exec(instruction(STZ, 2000, None, f.clone()));
 
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
+        }
+    }
+
+    #[test]
+    fn add_overflow() {
+        assert(
+            Word::new(Plus, 5, 1, 0, 2, 1),
+            Word::new(Plus, 5, 1, 0, 3, 2),
+            Word::new(Plus, 10, 2, 0, 5, 3),
+            Toggle::Off,
+        );
+        assert(
+            Word::new(Plus, 0, BYTE_SIZE - 1, 0, 0, 0),
+            Word::new(Plus, 0, 2, 0, 0, 0),
+            Word::new(Plus, 1, 1, 0, 0, 0),
+            Toggle::Off,
+        );
+        assert(
+            Word::new(Plus, BYTE_SIZE - 1, 0, 0, 0, 0),
+            Word::new(Plus, 2, 0, 0, 0, 0),
+            Word::new(Plus, 1, 0, 0, 0, 0),
+            Toggle::On,
+        );
+        assert(
+            Word::new(Minus, BYTE_SIZE - 1, 0, 0, 0, 0),
+            Word::new(Minus, 2, 0, 0, 0, 0),
+            Word::new(Minus, 1, 0, 0, 0, 0),
+            Toggle::On,
+        );
+        assert(
+            Word::new(Plus, 0, BYTE_SIZE - 2, BYTE_SIZE - 1, 0, 0),
+            Word::new(Plus, 0, 1, 1, 0, 0),
+            Word::new(Plus, 1, 0, 0, 0, 0),
+            Toggle::Off,
+        );
+        fn assert(a: Word, b: Word, expected: Word, overflow: Toggle) {
+            let mut mix = Mix::default();
+            mix.a = a;
+            mix.memory[2000] = b;
+
+            let mix = mix.exec(instruction(ADD, 2000, None, None));
+
+            assert_eq!(mix.memory[2000], b, "stays the same");
+            assert_eq!(mix.a, expected);
+            assert_eq!(mix.overflow, overflow);
+        }
+    }
+
+    #[test]
+    fn add_sign() {
+        assert(
+            Word::new(Plus, 0, 0, 0, 1, 0),
+            Word::new(Minus, 0, 0, 0, 0, 1),
+            Word::new(Plus, 0, 0, 0, 0, BYTE_SIZE - 1),
+        );
+        assert(
+            Word::new(Minus, 0, 0, 0, 0, 1),
+            Word::new(Minus, 0, 0, 0, 0, 1),
+            Word::new(Minus, 0, 0, 0, 0, 2),
+        );
+        assert(
+            Word::new(Plus, 0, 0, 0, 0, 1),
+            Word::new(Minus, 0, 0, 0, 0, 3),
+            Word::new(Minus, 0, 0, 0, 0, 2),
+        );
+        assert(
+            Word::new(Minus, 0, 0, 0, 0, 1),
+            Word::new(Plus, 0, 0, 0, 0, 3),
+            Word::new(Plus, 0, 0, 0, 0, 2),
+        );
+        assert(
+            Word::new(Plus, 0, 0, 0, 0, 1),
+            Word::new(Minus, 0, 0, 0, 0, 1),
+            Word::new(Plus, 0, 0, 0, 0, 0),
+        );
+        assert(
+            Word::new(Minus, 0, 0, 0, 0, 1),
+            Word::new(Plus, 0, 0, 0, 0, 1),
+            Word::new(Minus, 0, 0, 0, 0, 0),
+        );
+        fn assert(a: Word, b: Word, expected: Word) {
+            let mut mix = Mix::default();
+            mix.a = a;
+            mix.memory[2000] = b;
+
+            let mix = mix.exec(instruction(ADD, 2000, None, None));
+
+            assert_eq!(mix.memory[2000], b, "stays the same");
+            assert_eq!(mix.a, expected);
+            assert_eq!(mix.overflow, Toggle::Off);
         }
     }
 }
