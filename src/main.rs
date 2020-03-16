@@ -1,15 +1,11 @@
-const BYTE_SIZE: u8 = 64;
+const BYTE: u8 = 64;
 const WORD_BYTES: u8 = 5;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Default)]
 struct Byte(pub u8);
 impl Byte {
     fn new(b: u8) -> Byte {
-        debug_assert!(
-            b < BYTE_SIZE,
-            "Byte value should be smaller than {}",
-            BYTE_SIZE
-        );
+        debug_assert!(b < BYTE, "Byte value should be smaller than {}", BYTE);
         Byte(b)
     }
 }
@@ -94,12 +90,6 @@ impl Word {
         }
     }
 
-    fn negate(self) -> Self {
-        let mut word = self;
-        word.sign = self.sign.opposite();
-        word
-    }
-
     fn overflowing_add(self, other: Self) -> (Self, bool) {
         let mut a = self;
         let mut b = other;
@@ -108,26 +98,35 @@ impl Word {
         if a.sign == b.sign {
             for i in (0..WORD_BYTES as usize).rev() {
                 let sum = a.bytes[i].0 + b.bytes[i].0 + carry;
-                a.bytes[i] = Byte::new(sum % BYTE_SIZE);
-                carry = sum / BYTE_SIZE;
+                a.bytes[i] = Byte::new(sum % BYTE);
+                carry = sum / BYTE;
             }
         } else {
-            if a < b.negate() {
+            if a < -b {
                 std::mem::swap(&mut a, &mut b);
             }
             for i in (0..WORD_BYTES as usize).rev() {
                 let mut s = a.bytes[i].0 as i16 - b.bytes[i].0 as i16 - carry as i16;
                 if s < 0 {
-                    s += BYTE_SIZE as i16;
+                    s += BYTE as i16;
                     carry = 1;
                 } else {
                     carry = 0;
                 }
-                a.bytes[i] = Byte::new(s.abs() as u8 % BYTE_SIZE);
+                a.bytes[i] = Byte::new(s.abs() as u8 % BYTE);
             }
         }
 
-        (a, carry != 0)
+        (a, 0 < carry)
+    }
+}
+
+impl std::ops::Neg for Word {
+    type Output = Self;
+    fn neg(self) -> Self {
+        let mut word = self;
+        word.sign = self.sign.opposite();
+        word
     }
 }
 
@@ -307,8 +306,8 @@ impl Address {
         } else {
             Sign::Minus
         };
-        let b0 = Byte::new((address.abs() / BYTE_SIZE as i16) as u8);
-        let b1 = Byte::new((address.abs() % BYTE_SIZE as i16) as u8);
+        let b0 = Byte::new((address.abs() / BYTE as i16) as u8);
+        let b1 = Byte::new((address.abs() % BYTE as i16) as u8);
         Self {
             sign,
             bytes: [b0, b1],
@@ -376,12 +375,12 @@ impl Instruction {
 
 impl Mix {
     fn contents(&self, address: &Address) -> Word {
-        let i = address.bytes[0].0 as usize * BYTE_SIZE as usize + address.bytes[1].0 as usize;
+        let i = address.bytes[0].0 as usize * BYTE as usize + address.bytes[1].0 as usize;
         self.memory[i]
     }
 
     fn save_contents(&mut self, address: &Address, word: Word) {
-        let i = address.bytes[0].0 as usize * BYTE_SIZE as usize + address.bytes[1].0 as usize;
+        let i = address.bytes[0].0 as usize * BYTE as usize + address.bytes[1].0 as usize;
         self.memory[i] = word;
     }
 
@@ -429,28 +428,28 @@ impl Mix {
                 self.i6 = Index::from(self.load(instruction));
             }
             Operation::LDAN => {
-                self.a = self.load(instruction).negate();
+                self.a = -self.load(instruction);
             }
             Operation::LDXN => {
-                self.x = self.load(instruction).negate();
+                self.x = -self.load(instruction);
             }
             Operation::LD1N => {
-                self.i1 = Index::from(self.load(instruction).negate());
+                self.i1 = Index::from(-self.load(instruction));
             }
             Operation::LD2N => {
-                self.i2 = Index::from(self.load(instruction).negate());
+                self.i2 = Index::from(-self.load(instruction));
             }
             Operation::LD3N => {
-                self.i3 = Index::from(self.load(instruction).negate());
+                self.i3 = Index::from(-self.load(instruction));
             }
             Operation::LD4N => {
-                self.i4 = Index::from(self.load(instruction).negate());
+                self.i4 = Index::from(-self.load(instruction));
             }
             Operation::LD5N => {
-                self.i5 = Index::from(self.load(instruction).negate());
+                self.i5 = Index::from(-self.load(instruction));
             }
             Operation::LD6N => {
-                self.i6 = Index::from(self.load(instruction).negate());
+                self.i6 = Index::from(-self.load(instruction));
             }
             Operation::STA => {
                 self.store(self.a, instruction);
@@ -499,11 +498,12 @@ mod spec {
     use super::*;
     use Operation::*;
     use Sign::*;
+    use Toggle::*;
 
     #[test]
     fn field_byte_conversions() {
-        for l in 0..WORD_BYTES + 1 {
-            for r in l..WORD_BYTES + 1 {
+        for l in 0..8 {
+            for r in l..8 {
                 let field = Modification::field(l, r);
                 let byte: Byte = field.clone().into();
                 assert_eq!(
@@ -533,16 +533,20 @@ mod spec {
         Some(Modification::field(l, r))
     }
 
+    fn w(b0: u8, b1: u8, b2: u8, b3: u8, b4: u8) -> Word {
+        Word::new(Plus, b0, b1, b2, b3, b4)
+    }
+
     #[test]
     fn lda() {
-        assert(None, Word::new(Minus, 1, 16, 3, 5, 4));
-        assert(fields(1, 5), Word::new(Plus, 1, 16, 3, 5, 4));
-        assert(fields(3, 5), Word::new(Plus, 0, 0, 3, 5, 4));
-        assert(fields(0, 3), Word::new(Minus, 0, 0, 1, 16, 3));
-        assert(fields(4, 4), Word::new(Plus, 0, 0, 0, 0, 5));
-        assert(fields(0, 0), Word::new(Minus, 0, 0, 0, 0, 0));
+        assert(None, -w(1, 16, 3, 5, 4));
+        assert(fields(1, 5), w(1, 16, 3, 5, 4));
+        assert(fields(3, 5), w(0, 0, 3, 5, 4));
+        assert(fields(0, 3), -w(0, 0, 1, 16, 3));
+        assert(fields(4, 4), w(0, 0, 0, 0, 5));
+        assert(fields(0, 0), -w(0, 0, 0, 0, 0));
         fn assert(f: Option<Modification>, expected: Word) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -555,14 +559,14 @@ mod spec {
 
     #[test]
     fn ldan() {
-        assert(None, Word::new(Plus, 1, 16, 3, 5, 4));
-        assert(fields(1, 5), Word::new(Minus, 1, 16, 3, 5, 4));
-        assert(fields(3, 5), Word::new(Minus, 0, 0, 3, 5, 4));
-        assert(fields(0, 3), Word::new(Plus, 0, 0, 1, 16, 3));
-        assert(fields(4, 4), Word::new(Minus, 0, 0, 0, 0, 5));
-        assert(fields(0, 0), Word::new(Plus, 0, 0, 0, 0, 0));
+        assert(None, w(1, 16, 3, 5, 4));
+        assert(fields(1, 5), -w(1, 16, 3, 5, 4));
+        assert(fields(3, 5), -w(0, 0, 3, 5, 4));
+        assert(fields(0, 3), w(0, 0, 1, 16, 3));
+        assert(fields(4, 4), -w(0, 0, 0, 0, 5));
+        assert(fields(0, 0), w(0, 0, 0, 0, 0));
         fn assert(f: Option<Modification>, expected: Word) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -575,14 +579,14 @@ mod spec {
 
     #[test]
     fn ldx() {
-        assert(None, Word::new(Minus, 1, 16, 3, 5, 4));
-        assert(fields(1, 5), Word::new(Plus, 1, 16, 3, 5, 4));
-        assert(fields(3, 5), Word::new(Plus, 0, 0, 3, 5, 4));
-        assert(fields(0, 3), Word::new(Minus, 0, 0, 1, 16, 3));
-        assert(fields(4, 4), Word::new(Plus, 0, 0, 0, 0, 5));
-        assert(fields(0, 0), Word::new(Minus, 0, 0, 0, 0, 0));
+        assert(None, -w(1, 16, 3, 5, 4));
+        assert(fields(1, 5), w(1, 16, 3, 5, 4));
+        assert(fields(3, 5), w(0, 0, 3, 5, 4));
+        assert(fields(0, 3), -w(0, 0, 1, 16, 3));
+        assert(fields(4, 4), w(0, 0, 0, 0, 5));
+        assert(fields(0, 0), -w(0, 0, 0, 0, 0));
         fn assert(f: Option<Modification>, expected: Word) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -595,14 +599,14 @@ mod spec {
 
     #[test]
     fn ldxn() {
-        assert(None, Word::new(Plus, 1, 16, 3, 5, 4));
-        assert(fields(1, 5), Word::new(Minus, 1, 16, 3, 5, 4));
-        assert(fields(3, 5), Word::new(Minus, 0, 0, 3, 5, 4));
-        assert(fields(0, 3), Word::new(Plus, 0, 0, 1, 16, 3));
-        assert(fields(4, 4), Word::new(Minus, 0, 0, 0, 0, 5));
-        assert(fields(0, 0), Word::new(Plus, 0, 0, 0, 0, 0));
+        assert(None, w(1, 16, 3, 5, 4));
+        assert(fields(1, 5), -w(1, 16, 3, 5, 4));
+        assert(fields(3, 5), -w(0, 0, 3, 5, 4));
+        assert(fields(0, 3), w(0, 0, 1, 16, 3));
+        assert(fields(4, 4), -w(0, 0, 0, 0, 5));
+        assert(fields(0, 0), w(0, 0, 0, 0, 0));
         fn assert(f: Option<Modification>, expected: Word) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -620,7 +624,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -638,7 +642,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -656,7 +660,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -674,7 +678,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -692,7 +696,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -710,7 +714,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Plus, 0, 5));
         assert(fields(0, 0), Index::new(Minus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -728,7 +732,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -746,7 +750,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -764,7 +768,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -782,7 +786,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -800,7 +804,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -818,7 +822,7 @@ mod spec {
         assert(fields(4, 4), Index::new(Minus, 0, 5));
         assert(fields(0, 0), Index::new(Plus, 0, 0));
         fn assert(f: Option<Modification>, expected: Index) {
-            let before = Word::new(Minus, 1, 16, 3, 5, 4);
+            let before = -w(1, 16, 3, 5, 4);
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
@@ -831,16 +835,16 @@ mod spec {
 
     #[test]
     fn sta() {
-        assert(None, Word::new(Plus, 6, 7, 8, 9, 0));
-        assert(fields(1, 5), Word::new(Minus, 6, 7, 8, 9, 0));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 0));
-        assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 9, 0, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
+        assert(None, w(6, 7, 8, 9, 0));
+        assert(fields(1, 5), -w(6, 7, 8, 9, 0));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 0));
+        assert(fields(2, 2), -w(1, 0, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 9, 0, 4, 5));
+        assert(fields(0, 1), w(0, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
-            let before = Word::new(Plus, 6, 7, 8, 9, 0);
+            let before = w(6, 7, 8, 9, 0);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.a = before;
 
             let mix = mix.exec(instruction(STA, 2000, None, f.clone()));
@@ -852,16 +856,16 @@ mod spec {
 
     #[test]
     fn stx() {
-        assert(None, Word::new(Plus, 6, 7, 8, 9, 0));
-        assert(fields(1, 5), Word::new(Minus, 6, 7, 8, 9, 0));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 0));
-        assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 9, 0, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
+        assert(None, w(6, 7, 8, 9, 0));
+        assert(fields(1, 5), -w(6, 7, 8, 9, 0));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 0));
+        assert(fields(2, 2), -w(1, 0, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 9, 0, 4, 5));
+        assert(fields(0, 1), w(0, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
-            let before = Word::new(Plus, 6, 7, 8, 9, 0);
+            let before = w(6, 7, 8, 9, 0);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.x = before;
 
             let mix = mix.exec(instruction(STX, 2000, None, f.clone()));
@@ -873,16 +877,16 @@ mod spec {
 
     #[test]
     fn st1() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 6, 7));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i1 = before;
 
             let mix = mix.exec(instruction(ST1, 2000, None, f.clone()));
@@ -894,16 +898,16 @@ mod spec {
 
     #[test]
     fn st2() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 6, 7));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i2 = before;
 
             let mix = mix.exec(instruction(ST2, 2000, None, f.clone()));
@@ -915,16 +919,16 @@ mod spec {
 
     #[test]
     fn st3() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 6, 7));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i3 = before;
 
             let mix = mix.exec(instruction(ST3, 2000, None, f.clone()));
@@ -936,16 +940,16 @@ mod spec {
 
     #[test]
     fn st4() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 6, 7));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i4 = before;
 
             let mix = mix.exec(instruction(ST4, 2000, None, f.clone()));
@@ -957,16 +961,16 @@ mod spec {
 
     #[test]
     fn st5() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 6, 7));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i5 = before;
 
             let mix = mix.exec(instruction(ST5, 2000, None, f.clone()));
@@ -978,16 +982,16 @@ mod spec {
 
     #[test]
     fn st6() {
-        assert(None, Word::new(Plus, 0, 0, 0, 6, 7));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 6, 7));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Index::new(Plus, 6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i6 = before;
 
             let mix = mix.exec(instruction(ST6, 2000, None, f.clone()));
@@ -999,17 +1003,17 @@ mod spec {
 
     #[test]
     fn stj() {
-        assert(None, Word::new(Plus, 6, 7, 3, 4, 5));
-        assert(fields(0, 2), Word::new(Plus, 6, 7, 3, 4, 5));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 6, 7));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 7));
-        assert(fields(2, 2), Word::new(Minus, 1, 7, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 6, 7, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 7, 2, 3, 4, 5));
+        assert(None, w(6, 7, 3, 4, 5));
+        assert(fields(0, 2), w(6, 7, 3, 4, 5));
+        assert(fields(1, 5), -w(0, 0, 0, 6, 7));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 7));
+        assert(fields(2, 2), -w(1, 7, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 6, 7, 4, 5));
+        assert(fields(0, 1), w(7, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let before = Jump::new(6, 7);
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.j = before;
 
             let mix = mix.exec(instruction(STJ, 2000, None, f.clone()));
@@ -1021,15 +1025,15 @@ mod spec {
 
     #[test]
     fn stz() {
-        assert(None, Word::new(Plus, 0, 0, 0, 0, 0));
-        assert(fields(1, 5), Word::new(Minus, 0, 0, 0, 0, 0));
-        assert(fields(5, 5), Word::new(Minus, 1, 2, 3, 4, 0));
-        assert(fields(2, 2), Word::new(Minus, 1, 0, 3, 4, 5));
-        assert(fields(2, 3), Word::new(Minus, 1, 0, 0, 4, 5));
-        assert(fields(0, 1), Word::new(Plus, 0, 2, 3, 4, 5));
+        assert(None, w(0, 0, 0, 0, 0));
+        assert(fields(1, 5), -w(0, 0, 0, 0, 0));
+        assert(fields(5, 5), -w(1, 2, 3, 4, 0));
+        assert(fields(2, 2), -w(1, 0, 3, 4, 5));
+        assert(fields(2, 3), -w(1, 0, 0, 4, 5));
+        assert(fields(0, 1), w(0, 2, 3, 4, 5));
         fn assert(f: Option<Modification>, expected: Word) {
             let mut mix = Mix::default();
-            mix.memory[2000] = Word::new(Minus, 1, 2, 3, 4, 5);
+            mix.memory[2000] = -w(1, 2, 3, 4, 5);
 
             let mix = mix.exec(instruction(STZ, 2000, None, f.clone()));
 
@@ -1039,35 +1043,30 @@ mod spec {
 
     #[test]
     fn add_overflow() {
+        assert(w(5, 1, 0, 2, 1), w(5, 1, 0, 3, 2), w(10, 2, 0, 5, 3), Off);
         assert(
-            Word::new(Plus, 5, 1, 0, 2, 1),
-            Word::new(Plus, 5, 1, 0, 3, 2),
-            Word::new(Plus, 10, 2, 0, 5, 3),
-            Toggle::Off,
+            w(0, BYTE - 1, 0, 0, 0),
+            w(0, 2, 0, 0, 0),
+            w(1, 1, 0, 0, 0),
+            Off,
         );
         assert(
-            Word::new(Plus, 0, BYTE_SIZE - 1, 0, 0, 0),
-            Word::new(Plus, 0, 2, 0, 0, 0),
-            Word::new(Plus, 1, 1, 0, 0, 0),
-            Toggle::Off,
+            w(BYTE - 1, 0, 0, 0, 0),
+            w(2, 0, 0, 0, 0),
+            w(1, 0, 0, 0, 0),
+            On,
         );
         assert(
-            Word::new(Plus, BYTE_SIZE - 1, 0, 0, 0, 0),
-            Word::new(Plus, 2, 0, 0, 0, 0),
-            Word::new(Plus, 1, 0, 0, 0, 0),
-            Toggle::On,
+            -w(BYTE - 1, 0, 0, 0, 0),
+            -w(2, 0, 0, 0, 0),
+            -w(1, 0, 0, 0, 0),
+            On,
         );
         assert(
-            Word::new(Minus, BYTE_SIZE - 1, 0, 0, 0, 0),
-            Word::new(Minus, 2, 0, 0, 0, 0),
-            Word::new(Minus, 1, 0, 0, 0, 0),
-            Toggle::On,
-        );
-        assert(
-            Word::new(Plus, 0, BYTE_SIZE - 2, BYTE_SIZE - 1, 0, 0),
-            Word::new(Plus, 0, 1, 1, 0, 0),
-            Word::new(Plus, 1, 0, 0, 0, 0),
-            Toggle::Off,
+            w(0, BYTE - 2, BYTE - 1, 0, 0),
+            w(0, 1, 1, 0, 0),
+            w(1, 0, 0, 0, 0),
+            Off,
         );
         fn assert(a: Word, b: Word, expected: Word, overflow: Toggle) {
             let mut mix = Mix::default();
@@ -1084,36 +1083,12 @@ mod spec {
 
     #[test]
     fn add_sign() {
-        assert(
-            Word::new(Plus, 0, 0, 0, 1, 0),
-            Word::new(Minus, 0, 0, 0, 0, 1),
-            Word::new(Plus, 0, 0, 0, 0, BYTE_SIZE - 1),
-        );
-        assert(
-            Word::new(Minus, 0, 0, 0, 0, 1),
-            Word::new(Minus, 0, 0, 0, 0, 1),
-            Word::new(Minus, 0, 0, 0, 0, 2),
-        );
-        assert(
-            Word::new(Plus, 0, 0, 0, 0, 1),
-            Word::new(Minus, 0, 0, 0, 0, 3),
-            Word::new(Minus, 0, 0, 0, 0, 2),
-        );
-        assert(
-            Word::new(Minus, 0, 0, 0, 0, 1),
-            Word::new(Plus, 0, 0, 0, 0, 3),
-            Word::new(Plus, 0, 0, 0, 0, 2),
-        );
-        assert(
-            Word::new(Plus, 0, 0, 0, 0, 1),
-            Word::new(Minus, 0, 0, 0, 0, 1),
-            Word::new(Plus, 0, 0, 0, 0, 0),
-        );
-        assert(
-            Word::new(Minus, 0, 0, 0, 0, 1),
-            Word::new(Plus, 0, 0, 0, 0, 1),
-            Word::new(Minus, 0, 0, 0, 0, 0),
-        );
+        assert(w(0, 0, 0, 1, 0), -w(0, 0, 0, 0, 1), w(0, 0, 0, 0, BYTE - 1));
+        assert(-w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 2));
+        assert(w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 3), -w(0, 0, 0, 0, 2));
+        assert(-w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 3), w(0, 0, 0, 0, 2));
+        assert(w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 0));
+        assert(-w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 0));
         fn assert(a: Word, b: Word, expected: Word) {
             let mut mix = Mix::default();
             mix.a = a;
@@ -1123,7 +1098,7 @@ mod spec {
 
             assert_eq!(mix.memory[2000], b, "stays the same");
             assert_eq!(mix.a, expected);
-            assert_eq!(mix.overflow, Toggle::Off);
+            assert_eq!(mix.overflow, Off);
         }
     }
 }
