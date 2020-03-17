@@ -1101,4 +1101,24 @@ mod spec {
             assert_eq!(mix.overflow, Off);
         }
     }
+
+    #[test]
+    fn add_field() {
+        assert(w(14, 13, 12, 11, 10), fields(1, 1), w(5, 4, 3, 2, 15));
+        assert(w(14, 13, 12, 11, 10), fields(3, 3), w(5, 4, 3, 2, 13));
+        assert(w(14, 13, 12, 11, 10), fields(5, 5), w(5, 4, 3, 2, 11));
+        assert(-w(1, 1, 1, 1, 1), fields(0, 2), w(5, 4, 3, 1, 0));
+        assert(-w(1, 1, 1, 1, 1), fields(1, 2), w(5, 4, 3, 3, 2));
+        fn assert(b: Word, f: Option<Modification>, expected: Word) {
+            let mut mix = Mix::default();
+            mix.a = w(5, 4, 3, 2, 1);
+            mix.memory[2000] = b;
+
+            let mix = mix.exec(instruction(ADD, 2000, None, f));
+
+            assert_eq!(mix.memory[2000], b, "stays the same");
+            assert_eq!(mix.a, expected);
+            assert_eq!(mix.overflow, Off);
+        }
+    }
 }
