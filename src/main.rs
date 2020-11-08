@@ -94,30 +94,31 @@ impl Word {
         let mut a = self;
         let mut b = other;
 
-        let mut carry = 0;
         if a.sign == b.sign {
+            let mut carry = 0;
             for i in (0..WORD_BYTES as usize).rev() {
                 let sum = a.bytes[i].0 + b.bytes[i].0 + carry;
                 a.bytes[i] = Byte::new(sum % BYTE);
                 carry = sum / BYTE;
             }
+            (a, carry > 0)
         } else {
+            let mut borrow = 0;
             if a < -b {
                 std::mem::swap(&mut a, &mut b);
             }
             for i in (0..WORD_BYTES as usize).rev() {
-                let mut s = a.bytes[i].0 as i16 - b.bytes[i].0 as i16 - carry as i16;
+                let mut s = a.bytes[i].0 as i16 - b.bytes[i].0 as i16 - borrow as i16;
                 if s < 0 {
                     s += BYTE as i16;
-                    carry = 1;
+                    borrow = 1;
                 } else {
-                    carry = 0;
+                    borrow = 0;
                 }
                 a.bytes[i] = Byte::new(s.abs() as u8 % BYTE);
             }
+            (a, borrow > 0)
         }
-
-        (a, 0 < carry)
     }
 }
 
@@ -346,6 +347,7 @@ enum Operation {
     STJ,
     STZ,
     ADD,
+    SUB,
 }
 impl Operation {
     fn default_modification(self) -> Modification {
@@ -485,6 +487,11 @@ impl Mix {
             }
             Operation::ADD => {
                 let (sum, overflows) = self.a.overflowing_add(self.load(instruction));
+                self.a = sum;
+                self.overflow = Toggle::from(overflows);
+            }
+            Operation::SUB => {
+                let (sum, overflows) = self.a.overflowing_add(-self.load(instruction));
                 self.a = sum;
                 self.overflow = Toggle::from(overflows);
             }
@@ -1143,6 +1150,110 @@ mod spec {
                 b2,
                 (b34 / BYTE as u16) as u8,
                 (b34 % BYTE as u16) as u8,
+            )
+        }
+    }
+
+    #[test]
+    fn sub_overflow() {
+        assert(w(5, 1, 0, 2, 1), -w(5, 1, 0, 3, 2), w(10, 2, 0, 5, 3), Off);
+        assert(
+            w(0, BYTE - 1, 0, 0, 0),
+            -w(0, 2, 0, 0, 0),
+            w(1, 1, 0, 0, 0),
+            Off,
+        );
+        assert(
+            w(BYTE - 1, 0, 0, 0, 0),
+            -w(2, 0, 0, 0, 0),
+            w(1, 0, 0, 0, 0),
+            On,
+        );
+        assert(
+            -w(BYTE - 1, 0, 0, 0, 0),
+            w(2, 0, 0, 0, 0),
+            -w(1, 0, 0, 0, 0),
+            On,
+        );
+        assert(
+            w(0, BYTE - 2, BYTE - 1, 0, 0),
+            -w(0, 1, 1, 0, 0),
+            w(1, 0, 0, 0, 0),
+            Off,
+        );
+        fn assert(a: Word, b: Word, expected: Word, overflow: Toggle) {
+            let mut mix = Mix::default();
+            mix.a = a;
+            mix.memory[2000] = b;
+
+            let mix = mix.exec(instruction(SUB, 2000, None, None));
+
+            assert_eq!(mix.memory[2000], b, "stays the same");
+            assert_eq!(mix.a, expected);
+            assert_eq!(mix.overflow, overflow);
+        }
+    }
+
+    #[test]
+    fn sub_sign() {
+        assert(w(0, 0, 0, 1, 0), w(0, 0, 0, 0, 1), w(0, 0, 0, 0, BYTE - 1));
+        assert(-w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 2));
+        assert(w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 3), -w(0, 0, 0, 0, 2));
+        assert(-w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 3), w(0, 0, 0, 0, 2));
+        assert(w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 1), w(0, 0, 0, 0, 0));
+        assert(-w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 1), -w(0, 0, 0, 0, 0));
+        fn assert(a: Word, b: Word, expected: Word) {
+            let mut mix = Mix::default();
+            mix.a = a;
+            mix.memory[2000] = b;
+
+            let mix = mix.exec(instruction(SUB, 2000, None, None));
+
+            assert_eq!(mix.memory[2000], b, "stays the same");
+            assert_eq!(mix.a, expected);
+            assert_eq!(mix.overflow, Off);
+        }
+    }
+
+    #[test]
+    fn sub_field() {
+        assert(-w(14, 13, 12, 11, 10), fields(1, 1), w(50, 50, 50, 50, 36));
+        assert(-w(14, 13, 12, 11, 10), fields(3, 3), w(50, 50, 50, 50, 38));
+        assert(-w(14, 13, 12, 11, 10), fields(5, 5), w(50, 50, 50, 50, 40));
+        assert(w(1, 1, 1, 1, 1), fields(0, 2), w(50, 50, 50, 49, 49));
+        assert(w(1, 1, 1, 1, 1), fields(1, 2), w(50, 50, 50, 49, 49));
+        fn assert(b: Word, f: Option<Modification>, expected: Word) {
+            let mut mix = Mix::default();
+            mix.a = w(50, 50, 50, 50, 50);
+            mix.memory[2000] = b;
+
+            let mix = mix.exec(instruction(SUB, 2000, None, f));
+
+            assert_eq!(mix.memory[2000], b, "stays the same");
+            assert_eq!(mix.a, expected);
+            assert_eq!(mix.overflow, Off);
+        }
+    }
+
+    #[test]
+    fn sub_example() {
+        let mut mix = Mix::default();
+        mix.a = -w(1234, 0, 9);
+        mix.memory[1000] = -w(2000, 150, 0);
+
+        let mix = mix.exec(instruction(SUB, 1000, None, None));
+
+        assert_eq!(mix.a, w(766, 149, BYTE - 9));
+        assert_eq!(mix.overflow, Off);
+
+        fn w(b01: u16, b23: u16, b4: u8) -> Word {
+            Word::new(
+                Plus,
+                (b01 / BYTE as u16) as u8,
+                (b01 % BYTE as u16) as u8,
+                (b23 / BYTE as u16) as u8,
+                (b23 % BYTE as u16) as u8,
+                b4,
             )
         }
     }
