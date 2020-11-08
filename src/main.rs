@@ -313,6 +313,10 @@ impl Address {
             bytes: [b0, b1],
         }
     }
+
+    fn memory_index(&self) -> usize {
+        self.bytes[0].0 as usize * BYTE as usize + self.bytes[1].0 as usize
+    }
 }
 enum Operation {
     LDA,
@@ -375,13 +379,11 @@ impl Instruction {
 
 impl Mix {
     fn contents(&self, address: &Address) -> Word {
-        let i = address.bytes[0].0 as usize * BYTE as usize + address.bytes[1].0 as usize;
-        self.memory[i]
+        self.memory[address.memory_index()]
     }
 
     fn save_contents(&mut self, address: &Address, word: Word) {
-        let i = address.bytes[0].0 as usize * BYTE as usize + address.bytes[1].0 as usize;
-        self.memory[i] = word;
+        self.memory[address.memory_index()] = word;
     }
 
     fn load(&self, instruction: Instruction) -> Word {
