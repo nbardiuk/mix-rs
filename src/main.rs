@@ -263,7 +263,7 @@ impl Default for Mix {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum Modification {
     Field { l: u8, r: u8 },
 }
@@ -507,15 +507,15 @@ mod spec {
         for l in 0..8 {
             for r in l..8 {
                 let field = Modification::field(l, r);
-                let byte: Byte = field.clone().into();
+                let byte: Byte = field.into();
                 assert_eq!(
                     field,
-                    Modification::from(byte.clone()),
+                    Modification::from(byte),
                     "round trip conversion of field specification through byte should be idempotent"
                 );
                 assert_eq!(
-                    byte.clone(),
-                    Modification::from(byte.clone()).into(),
+                    byte,
+                    Modification::from(byte).into(),
                     "round trip conversion of byte through field specification through should be idempotent"
                 );
             }
@@ -552,7 +552,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LDA, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LDA, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.a, expected, "for specification {:?}", f);
@@ -572,7 +572,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LDAN, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LDAN, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.a, expected, "for specification {:?}", f);
@@ -592,7 +592,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LDX, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LDX, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.x, expected, "for specification {:?}", f);
@@ -612,7 +612,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LDXN, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LDXN, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.x, expected, "for specification {:?}", f);
@@ -630,7 +630,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD1, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD1, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i1, expected, "for specification {:?}", f);
@@ -648,7 +648,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD2, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD2, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i2, expected, "for specification {:?}", f);
@@ -666,7 +666,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD3, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD3, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i3, expected, "for specification {:?}", f);
@@ -684,7 +684,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD4, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD4, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i4, expected, "for specification {:?}", f);
@@ -702,7 +702,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD5, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD5, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i5, expected, "for specification {:?}", f);
@@ -720,7 +720,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD6, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD6, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i6, expected, "for specification {:?}", f);
@@ -738,7 +738,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD1N, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD1N, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i1, expected, "for specification {:?}", f);
@@ -756,7 +756,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD2N, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD2N, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i2, expected, "for specification {:?}", f);
@@ -774,7 +774,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD3N, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD3N, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i3, expected, "for specification {:?}", f);
@@ -792,7 +792,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD4N, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD4N, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i4, expected, "for specification {:?}", f);
@@ -810,7 +810,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD5N, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD5N, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i5, expected, "for specification {:?}", f);
@@ -828,7 +828,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = before;
 
-            let mix = mix.exec(instruction(LD6N, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(LD6N, 2000, None, f));
 
             assert_eq!(mix.memory[2000], before, "should not change");
             assert_eq!(mix.i6, expected, "for specification {:?}", f);
@@ -849,7 +849,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.a = before;
 
-            let mix = mix.exec(instruction(STA, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(STA, 2000, None, f));
 
             assert_eq!(mix.a, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -870,7 +870,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.x = before;
 
-            let mix = mix.exec(instruction(STX, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(STX, 2000, None, f));
 
             assert_eq!(mix.x, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -891,7 +891,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i1 = before;
 
-            let mix = mix.exec(instruction(ST1, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(ST1, 2000, None, f));
 
             assert_eq!(mix.i1, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -912,7 +912,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i2 = before;
 
-            let mix = mix.exec(instruction(ST2, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(ST2, 2000, None, f));
 
             assert_eq!(mix.i2, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -933,7 +933,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i3 = before;
 
-            let mix = mix.exec(instruction(ST3, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(ST3, 2000, None, f));
 
             assert_eq!(mix.i3, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -954,7 +954,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i4 = before;
 
-            let mix = mix.exec(instruction(ST4, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(ST4, 2000, None, f));
 
             assert_eq!(mix.i4, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -975,7 +975,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i5 = before;
 
-            let mix = mix.exec(instruction(ST5, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(ST5, 2000, None, f));
 
             assert_eq!(mix.i5, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -996,7 +996,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.i6 = before;
 
-            let mix = mix.exec(instruction(ST6, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(ST6, 2000, None, f));
 
             assert_eq!(mix.i6, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -1018,7 +1018,7 @@ mod spec {
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
             mix.j = before;
 
-            let mix = mix.exec(instruction(STJ, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(STJ, 2000, None, f));
 
             assert_eq!(mix.j, before, "should not change");
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
@@ -1037,7 +1037,7 @@ mod spec {
             let mut mix = Mix::default();
             mix.memory[2000] = -w(1, 2, 3, 4, 5);
 
-            let mix = mix.exec(instruction(STZ, 2000, None, f.clone()));
+            let mix = mix.exec(instruction(STZ, 2000, None, f));
 
             assert_eq!(mix.memory[2000], expected, "for specification {:?}", f);
         }
