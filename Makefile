@@ -1,6 +1,6 @@
 .PHONY: tdd
 tdd:
-	cargo watch --clear --shell "time cargo test $(only) -q -- --nocapture"
+	watchexec --clear "time cargo test $(only) -q -- --nocapture"
 
 .PHONY: bench
 bench:
