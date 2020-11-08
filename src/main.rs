@@ -1123,4 +1123,27 @@ mod spec {
             assert_eq!(mix.overflow, Off);
         }
     }
+
+    #[test]
+    fn add_example() {
+        let mut mix = Mix::default();
+        mix.a = w(1234, 1, 150);
+        mix.memory[1000] = w(100, 5, 50);
+
+        let mix = mix.exec(instruction(ADD, 1000, None, None));
+
+        assert_eq!(mix.a, w(1334, 6, 200));
+        assert_eq!(mix.overflow, Off);
+
+        fn w(b01: u16, b2: u8, b34: u16) -> Word {
+            Word::new(
+                Plus,
+                (b01 / BYTE as u16) as u8,
+                (b01 % BYTE as u16) as u8,
+                b2,
+                (b34 / BYTE as u16) as u8,
+                (b34 % BYTE as u16) as u8,
+            )
+        }
+    }
 }
