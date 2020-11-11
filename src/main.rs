@@ -157,7 +157,7 @@ impl Word {
                 ],
             },
             Word {
-                sign: Sign::Plus,
+                sign,
                 bytes: [
                     Byte::new(product[4] as u8),
                     Byte::new(product[3] as u8),
@@ -1354,6 +1354,6 @@ mod spec {
 
         assert_eq!(mix.overflow, Off);
         assert_eq!(mix.a, -w(0, 0, 0, 0, 0));
-        assert_eq!(mix.x, w(0, 0, 0, 0, 1));
+        assert_eq!(mix.x, -w(0, 0, 0, 0, 1));
     }
 }
