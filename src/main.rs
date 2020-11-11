@@ -120,6 +120,55 @@ impl Word {
             (a, borrow > 0)
         }
     }
+
+    fn overflowing_mul(self, other: Self) -> (Self, Self, bool) {
+        fn rev_bytes(a: Word) -> Vec<u16> {
+            a.bytes.iter().rev().map(|b| b.0 as u16).collect()
+        }
+        let a = rev_bytes(self);
+        let b = rev_bytes(other);
+
+        let mut carry = 0;
+
+        let mut product = [0; (WORD_BYTES * 2) as usize];
+        for b_i in 0..WORD_BYTES as usize {
+            for a_i in 0..WORD_BYTES as usize {
+                let p = product[a_i + b_i] + a[a_i] * b[b_i] + carry;
+                product[a_i + b_i] = p % BYTE as u16;
+                carry = p / BYTE as u16;
+            }
+        }
+
+        let sign = if self.sign == other.sign {
+            Sign::Plus
+        } else {
+            Sign::Minus
+        };
+
+        (
+            Word {
+                sign,
+                bytes: [
+                    Byte::new(product[9] as u8),
+                    Byte::new(product[8] as u8),
+                    Byte::new(product[7] as u8),
+                    Byte::new(product[6] as u8),
+                    Byte::new(product[5] as u8),
+                ],
+            },
+            Word {
+                sign: Sign::Plus,
+                bytes: [
+                    Byte::new(product[4] as u8),
+                    Byte::new(product[3] as u8),
+                    Byte::new(product[2] as u8),
+                    Byte::new(product[1] as u8),
+                    Byte::new(product[0] as u8),
+                ],
+            },
+            carry > 0,
+        )
+    }
 }
 
 impl std::ops::Neg for Word {
@@ -348,6 +397,7 @@ enum Operation {
     STZ,
     ADD,
     SUB,
+    MUL,
 }
 impl Operation {
     fn default_modification(self) -> Modification {
@@ -493,6 +543,12 @@ impl Mix {
             Operation::SUB => {
                 let (sum, overflows) = self.a.overflowing_add(-self.load(instruction));
                 self.a = sum;
+                self.overflow = Toggle::from(overflows);
+            }
+            Operation::MUL => {
+                let (a, x, overflows) = self.a.overflowing_mul(self.load(instruction));
+                self.a = a;
+                self.x = x;
                 self.overflow = Toggle::from(overflows);
             }
         };
@@ -1256,5 +1312,48 @@ mod spec {
                 b4,
             )
         }
+    }
+
+    #[test]
+    fn mul_examples() {
+        let mut mix = Mix::default();
+        mix.a = w(1, 1, 1, 1, 1);
+        mix.memory[1000] = w(1, 1, 1, 1, 1);
+
+        let mix = mix.exec(instruction(MUL, 1000, None, None));
+
+        assert_eq!(mix.a, w(0, 1, 2, 3, 4));
+        assert_eq!(mix.x, w(5, 4, 3, 2, 1));
+        assert_eq!(mix.overflow, Off);
+
+        let mut mix = Mix::default();
+        mix.a = w(0, 0, 0, 1, 48); // 112
+        mix.memory[1000] = -w(2, 7, 7, 7, 7);
+
+        let mix = mix.exec(instruction(MUL, 1000, None, fields(1, 1)));
+
+        assert_eq!(mix.a, w(0, 0, 0, 0, 0));
+        assert_eq!(mix.x, w(0, 0, 0, 3, 32)); // 224
+        assert_eq!(mix.overflow, Off);
+
+        let mut mix = Mix::default();
+        mix.a = w(BYTE - 1, BYTE - 1, BYTE - 1, BYTE - 1, BYTE - 1);
+        mix.memory[1000] = w(BYTE - 1, 0, 0, 0, 0);
+
+        let mix = mix.exec(instruction(MUL, 1000, None, None));
+
+        assert_eq!(mix.overflow, On);
+        assert_eq!(mix.a, w(0, BYTE - 1, BYTE - 1, BYTE - 1, BYTE - 1));
+        assert_eq!(mix.x, w(1, 0, 0, 0, 0));
+
+        let mut mix = Mix::default();
+        mix.a = w(0, 0, 0, 0, 1);
+        mix.memory[1000] = -w(0, 0, 0, 0, 1);
+
+        let mix = mix.exec(instruction(MUL, 1000, None, None));
+
+        assert_eq!(mix.overflow, Off);
+        assert_eq!(mix.a, -w(0, 0, 0, 0, 0));
+        assert_eq!(mix.x, w(0, 0, 0, 0, 1));
     }
 }
